@@ -8,15 +8,25 @@ Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
 
 ## Install
 
+From a clone, which puts `kumsaati` in `~/.cargo/bin`:
+
 ```bash
 cargo install --path .
 ```
 
-Or run it straight from the repository:
+That directory has to be on `PATH`; `cargo` says so if it is not. To remove it
+again, `cargo uninstall kumsaati`.
+
+Or run it straight from the repository without installing:
 
 ```bash
 cargo run --release
 ```
+
+Prebuilt binaries for Linux and Windows are attached to each
+[release](../../releases).
+
+Needs a Rust toolchain of 1.88 or newer, because of let-chains.
 
 ## Usage
 
@@ -107,6 +117,54 @@ environment does the same.
 taking a new colour on every hit. `drift` crawls along a slow path, which keeps
 a static image off one set of pixels.
 
+## Running it when the machine goes idle
+
+`kumsaati` is a screensaver, not a screen locker. Any key press or mouse
+movement ends it, and it never asks for a password. If you want the screen
+actually locked, run a locker and let this decorate the wait, or use it only
+inside a terminal multiplexer.
+
+### tmux
+
+tmux can run it as its lock command, which is the least fuss of any of this:
+
+```tmux
+# ~/.tmux.conf
+set -g lock-after-time 300
+set -g lock-command "kumsaati"
+```
+
+Five minutes without input in a session and the clock takes over the attached
+client; the first key gives the shell back. `tmux lock-session` runs it
+straight away, which is the quickest way to check the setting took.
+
+The timer counts activity per session, so a session running something chatty
+never goes idle.
+
+### Hyprland, with hypridle
+
+```ini
+# ~/.config/hypr/hypridle.conf
+listener {
+    timeout = 300
+    # Only start one, however many times the listener fires.
+    on-timeout = pidof kumsaati > /dev/null || foot --fullscreen -- kumsaati
+}
+```
+
+Any terminal that can start fullscreen will do: `alacritty -o
+window.startup_mode=Fullscreen -e kumsaati`, `kitty --start-as=fullscreen
+kumsaati`, and so on.
+
+To have the screen really locked as well, keep `hyprlock` on a longer timeout
+and let `kumsaati` fill the time before it.
+
+### sway, or anything else with swayidle
+
+```bash
+swayidle -w timeout 300 'pidof kumsaati > /dev/null || foot --fullscreen -- kumsaati'
+```
+
 ## Configuration
 
 Settings come from three layers, each beating the one before it: the built-in
@@ -156,6 +214,9 @@ hour_format = 24
 
 # Darken the animation right behind the clock, so the digits stay legible.
 clock_backdrop = true
+
+# auto, truecolor, 256 or none. auto reads COLORTERM, TERM and NO_COLOR.
+color = "auto"
 
 # Fix the randomness for a reproducible picture. Left out, every run differs.
 # seed = 42

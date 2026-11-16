@@ -124,11 +124,11 @@ Amaç: Her terminalde düzgün, hafif.
 ## Faz 7 — Gerçek ekran koruyucu entegrasyonu ve dağıtım
 Amaç: Gerçekten "boşta kalınca" çalışsın.
 
-- [ ] `cargo install --path .` ile kurulum talimatı
-- [ ] tmux entegrasyonu: `set -g lock-after-time 300` + `set -g lock-command "kumsaati"`
-- [ ] (opsiyonel) CachyOS masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
+- [x] `cargo install --path .` ile kurulum talimatı
+- [x] tmux entegrasyonu: `set -g lock-after-time 300` + `set -g lock-command "kumsaati"`
+- [x] (opsiyonel) CachyOS masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
       tam ekran terminalde başlatma örneği
-- [ ] GitHub Actions: Linux + Windows'ta `fmt`, `clippy`, `test`, release build
+- [x] GitHub Actions: Linux + Windows'ta `fmt`, `clippy`, `test`, release build
 - [ ] Sürüm etiketi `v0.1.0`, release binary'leri
 
 **Bitti:** tmux'ta 5 dk boşta kalınca kumsaati açılıyor; CI yeşil.
