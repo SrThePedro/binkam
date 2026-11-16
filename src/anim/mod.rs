@@ -1,5 +1,6 @@
 //! Background animations and the registry that builds them by name.
 
+pub mod fire;
 pub mod matrix;
 pub mod starfield;
 
@@ -28,7 +29,7 @@ pub trait Animation {
 
 /// Every animation name, in the order they are offered to the user.
 pub const fn all_names() -> &'static [&'static str] {
-    &["matrix", "starfield"]
+    &["fire", "matrix", "starfield"]
 }
 
 /// Build the animation called `name`, seeded with `seed`.
@@ -38,6 +39,7 @@ pub const fn all_names() -> &'static [&'static str] {
 /// them behind one pointer and dispatches calls through a vtable.
 pub fn by_name(name: &str, seed: u64) -> Option<Box<dyn Animation>> {
     match name {
+        "fire" => Some(Box::new(fire::Fire::new(seed))),
         "matrix" => Some(Box::new(matrix::Matrix::new(seed))),
         "starfield" => Some(Box::new(starfield::Starfield::new(seed))),
         _ => None,

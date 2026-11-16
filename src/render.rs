@@ -49,18 +49,8 @@ pub fn scale_rgb(color: Rgb, factor: f32) -> Rgb {
 
 /// Draw two stacked pixels inside one cell with an upper half block.
 ///
-/// Not called yet: the first half-block animations (fire, plasma) land in
-/// phase 3. `expect` rather than `allow`, so this attribute itself starts
-/// warning the moment something does use it and it can be deleted.
-///
 /// The cell grid is `area.width` by `area.height * 2` pixels: `top` is the
 /// even pixel row, `bottom` the odd one.
-// The unit tests below do exercise it, so the expectation only holds in a
-// non-test build.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the half-block animations in phase 3")
-)]
 pub fn put_pixel_pair(buf: &mut Buffer, x: u16, y: u16, top: Color, bottom: Color) {
     if let Some(cell) = buf.cell_mut((x, y)) {
         cell.set_char('▀').set_fg(top).set_bg(bottom);
