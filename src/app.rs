@@ -400,26 +400,33 @@ impl App {
 
     /// React to a terminal event.
     ///
-    /// Outside preview mode any key press quits, once the grace period is
-    /// over. Resize, mouse, focus and paste events never are a reason to.
+    /// Outside preview mode any key press or mouse movement quits, once the
+    /// grace period is over. Resize, focus and paste events never do.
     fn handle_event(&mut self, event: &Event) {
         if self.uptime < GRACE_PERIOD {
             return;
         }
-        // On Windows every key arrives twice (Press and Release); only Press
-        // counts, or the program would quit the moment it started.
-        let Event::Key(key) = event else { return };
-        if key.kind != KeyEventKind::Press {
-            return;
-        }
 
+        match event {
+            // On Windows every key arrives twice (Press and Release); only
+            // Press counts, or the program would quit as it started.
+            Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key.code),
+            // Someone reaching for the mouse is someone back at the machine.
+            // In preview mode they are browsing, so it is left alone.
+            Event::Mouse(_) if !self.preview => self.running = false,
+            _ => {}
+        }
+    }
+
+    /// React to a key press.
+    fn handle_key(&mut self, code: KeyCode) {
         if !self.preview {
             self.running = false;
             return;
         }
 
         let count = self.anim_pool.len();
-        match key.code {
+        match code {
             KeyCode::Char('q' | 'Q') | KeyCode::Esc => self.running = false,
             KeyCode::Char('n' | 'N') | KeyCode::Right => self.start_switch(self.anim_index + 1),
             KeyCode::Char('p' | 'P') | KeyCode::Left => {
@@ -526,7 +533,9 @@ fn buffer_to_text(buf: &Buffer) -> String {
 mod tests {
     use super::*;
     use clap::Parser;
-    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventState, KeyModifiers};
+    use ratatui::crossterm::event::{
+        KeyCode, KeyEvent, KeyEventState, KeyModifiers, MouseEvent, MouseEventKind,
+    };
 
     /// Build an app from arguments alone.
     ///
@@ -594,6 +603,38 @@ mod tests {
         app.update(Duration::from_millis(100));
         app.handle_event(&key(KeyEventKind::Press));
         assert!(app.running);
+    }
+
+    fn mouse_moved() -> Event {
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 4,
+            row: 2,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    #[test]
+    fn mouse_movement_quits() {
+        let mut app = app();
+        app.update(GRACE_PERIOD);
+        app.handle_event(&mouse_moved());
+        assert!(!app.running, "a screensaver should get out of the way");
+    }
+
+    #[test]
+    fn mouse_movement_during_the_grace_period_is_ignored() {
+        let mut app = app();
+        app.update(Duration::from_millis(100));
+        app.handle_event(&mouse_moved());
+        assert!(app.running);
+    }
+
+    #[test]
+    fn preview_ignores_the_mouse() {
+        let mut app = preview();
+        app.handle_event(&mouse_moved());
+        assert!(app.running, "browsing should not be interrupted");
     }
 
     #[test]
