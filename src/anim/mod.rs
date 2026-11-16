@@ -3,6 +3,7 @@
 pub mod fire;
 pub mod life;
 pub mod matrix;
+pub mod pipes;
 pub mod plasma;
 pub mod rain;
 pub mod snow;
@@ -38,6 +39,7 @@ pub const fn all_names() -> &'static [&'static str] {
         "fire",
         "life",
         "matrix",
+        "pipes",
         "plasma",
         "rain",
         "snow",
@@ -56,6 +58,7 @@ pub fn by_name(name: &str, seed: u64) -> Option<Box<dyn Animation>> {
         "fire" => Some(Box::new(fire::Fire::new(seed))),
         "life" => Some(Box::new(life::Life::new(seed))),
         "matrix" => Some(Box::new(matrix::Matrix::new(seed))),
+        "pipes" => Some(Box::new(pipes::Pipes::new(seed))),
         "plasma" => Some(Box::new(plasma::Plasma::new(seed))),
         "rain" => Some(Box::new(rain::Rain::new(seed))),
         "snow" => Some(Box::new(snow::Snow::new(seed))),

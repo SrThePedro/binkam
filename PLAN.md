@@ -65,7 +65,7 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 - [x] `snow` — süzülen kar taneleri, yatay salınım
 - [x] `rain` — eğik yağmur çizgileri, yere çarpma sıçramaları
 - [x] `waves` — üst üste binen sinüs dalgaları (half-block)
-- [ ] `pipes` — kalıcı iz bırakarak büyüyen borular, ekran dolunca temizlenir
+- [x] `pipes` — kalıcı iz bırakarak büyüyen borular, ekran dolunca temizlenir
 
 **Bitti:** `--list` en az 5 animasyon gösteriyor, hepsi `--dump-frame` ile hatasız çiziliyor.
 
