@@ -58,7 +58,7 @@ Amaç: Genişletilebilir yapı ve saatin arkasında hareket.
 ## Faz 3 — Animasyon kütüphanesi
 Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 
-- [ ] `matrix` — yeşil karakter yağmuru, kuyruk solması
+- [x] `matrix` — yeşil karakter yağmuru, kuyruk solması
 - [ ] `fire` — DOOM tarzı ateş (half-block, ısı paleti)
 - [ ] `plasma` — sinüs tabanlı truecolor plazma
 - [ ] `bounce` — saatin kendisi DVD logosu gibi kenarlardan seker, her çarpışmada renk değişir

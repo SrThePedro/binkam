@@ -35,6 +35,10 @@ const BACKDROP_KEEP: f32 = 0.28;
 /// Weight of the newest sample in the smoothed frames-per-second estimate.
 const FPS_SMOOTHING: f32 = 0.1;
 
+/// Frames simulated before `--dump-frame` draws, so the output shows a
+/// settled animation rather than its first frame.
+const DUMP_WARMUP_FRAMES: u32 = 90;
+
 /// Screensaver state.
 pub struct App {
     /// Cleared when the user asks to quit; ends the main loop.
@@ -221,8 +225,11 @@ pub fn dump_frame(cli: &Cli) -> color_eyre::Result<()> {
     let mut app = App::new(cli)?;
 
     app.resize(Rect::new(0, 0, width, height));
-    // Let time move a little so animations are not stuck on their first frame.
-    app.update(Duration::from_millis(500));
+    // Simulate a few seconds so the picture is representative: effects that
+    // fall in from off screen look empty on their first frame.
+    for _ in 0..DUMP_WARMUP_FRAMES {
+        app.update(cli.frame_time());
+    }
     terminal.draw(|frame| app.render(frame))?;
 
     print!("{}", buffer_to_text(terminal.backend().buffer()));

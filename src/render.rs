@@ -18,6 +18,11 @@ pub fn text_cols(text: &str) -> u16 {
     u16::try_from(text.chars().count()).unwrap_or(u16::MAX)
 }
 
+/// An RGB triple as a ratatui colour.
+pub fn rgb(color: Rgb) -> Color {
+    Color::Rgb(color.0, color.1, color.2)
+}
+
 /// Blend `a` towards `b`; `t` is clamped to `0.0..=1.0`.
 pub fn lerp_rgb(a: Rgb, b: Rgb, t: f32) -> Rgb {
     let t = t.clamp(0.0, 1.0);
@@ -94,6 +99,11 @@ fn faded(color: Color, keep: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rgb_passes_components_through() {
+        assert_eq!(rgb((1, 2, 3)), Color::Rgb(1, 2, 3));
+    }
 
     #[test]
     fn lerp_hits_both_ends() {
