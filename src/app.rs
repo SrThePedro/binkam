@@ -7,6 +7,7 @@ use std::{
 
 use chrono::Local;
 use color_eyre::eyre::eyre;
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use ratatui::{
     DefaultTerminal, Frame, Terminal,
     backend::TestBackend,
@@ -48,6 +49,17 @@ const FPS_SMOOTHING: f32 = 0.1;
 /// settled animation rather than its first frame.
 const DUMP_WARMUP_FRAMES: u32 = 90;
 
+/// How long a change of animation takes, from lit through black and back.
+const TRANSITION: Duration = Duration::from_millis(900);
+
+/// A change from one animation to the next, fading out and back in.
+struct Transition {
+    /// Runs from 0.0 to 1.0; the screen is fully black halfway through.
+    progress: f32,
+    /// The animation to put on screen at the halfway point, taken once used.
+    next: Option<Box<dyn Animation>>,
+}
+
 /// Screensaver state.
 pub struct App {
     /// Cleared when the user asks to quit; ends the main loop.
@@ -71,6 +83,16 @@ pub struct App {
     theme: Theme,
     /// Whether to darken the animation behind the clock.
     backdrop: bool,
+    /// Randomness for picking the next animation and seeding it.
+    rng: StdRng,
+    /// Index of the running animation in `anim::all_names`.
+    anim_index: usize,
+    /// How long to wait between animation changes, or `None` for never.
+    cycle_interval: Option<Duration>,
+    /// Time since the last change of animation.
+    since_switch: Duration,
+    /// The fade in progress, if any.
+    transition: Option<Transition>,
     /// Whether to draw the frames-per-second counter.
     show_fps: bool,
     /// Smoothed frames per second.
@@ -82,8 +104,20 @@ pub struct App {
 impl App {
     /// Build an app from parsed command line arguments.
     pub fn new(cli: &Cli) -> color_eyre::Result<Self> {
-        let animation = crate::anim::by_name(&cli.anim, cli.resolved_seed())
-            .ok_or_else(|| eyre!("unknown animation `{}`; try --list", cli.anim))?;
+        let mut rng = StdRng::seed_from_u64(cli.resolved_seed());
+        let names = crate::anim::all_names();
+
+        let anim_index = match &cli.anim {
+            Some(name) => names
+                .iter()
+                .position(|known| known == name)
+                .ok_or_else(|| eyre!("unknown animation `{name}`; try --list"))?,
+            // Nothing pinned: start somewhere random and keep changing.
+            None => rng.random_range(0..names.len()),
+        };
+        let animation = crate::anim::by_name(names[anim_index], rng.random::<u64>())
+            .ok_or_else(|| eyre!("unknown animation `{}`; try --list", names[anim_index]))?;
+
         let theme = Theme::by_name(&cli.theme)
             .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
 
@@ -105,6 +139,11 @@ impl App {
             motion: ClockMotion::new(position),
             animation,
             area: Rect::ZERO,
+            rng,
+            anim_index,
+            cycle_interval: cli.cycle_interval(),
+            since_switch: Duration::ZERO,
+            transition: None,
             theme,
             backdrop: !cli.no_backdrop,
             show_fps: cli.show_fps,
@@ -143,10 +182,77 @@ impl App {
 
     /// Tell the animation about a new terminal size, if it actually changed.
     pub fn resize(&mut self, area: Rect) {
-        if self.area != area {
-            self.area = area;
-            self.animation.resize(area);
+        if self.area == area {
+            return;
         }
+        self.area = area;
+        self.animation.resize(area);
+        // The animation waiting to fade in needs the new size too, or it
+        // would arrive laid out for the old one.
+        if let Some(next) = self.transition.as_mut().and_then(|t| t.next.as_mut()) {
+            next.resize(area);
+        }
+    }
+
+    /// Start fading over to the animation at `index`.
+    fn start_switch(&mut self, index: usize) {
+        let names = crate::anim::all_names();
+        let index = index % names.len();
+        let Some(mut next) = crate::anim::by_name(names[index], self.rng.random::<u64>()) else {
+            return;
+        };
+
+        next.resize(self.area);
+        self.anim_index = index;
+        self.since_switch = Duration::ZERO;
+        self.transition = Some(Transition {
+            progress: 0.0,
+            next: Some(next),
+        });
+    }
+
+    /// A random animation that is not the one already running.
+    fn other_animation(&mut self) -> usize {
+        let count = crate::anim::all_names().len();
+        if count < 2 {
+            return self.anim_index;
+        }
+        // Draw from the other animations by skipping over the current one.
+        let mut index = self.rng.random_range(0..count - 1);
+        if index >= self.anim_index {
+            index += 1;
+        }
+        index
+    }
+
+    /// Move a running fade along, swapping animations at the halfway point.
+    fn advance_transition(&mut self, dt: Duration) {
+        let Some(transition) = self.transition.as_mut() else {
+            return;
+        };
+
+        transition.progress += dt.as_secs_f32() / TRANSITION.as_secs_f32();
+        // The old animation is fully dark at the midpoint: the moment to
+        // swap, so neither one is ever seen appearing.
+        let arrived = (transition.progress >= 0.5)
+            .then(|| transition.next.take())
+            .flatten();
+        let finished = transition.progress >= 1.0;
+
+        if let Some(animation) = arrived {
+            self.animation = animation;
+        }
+        if finished {
+            self.transition = None;
+        }
+    }
+
+    /// How much of the animation's brightness survives the current fade.
+    fn transition_keep(&self) -> f32 {
+        self.transition.as_ref().map_or(1.0, |transition| {
+            // 1.0 at both ends, 0.0 in the middle.
+            (transition.progress * 2.0 - 1.0).abs().clamp(0.0, 1.0)
+        })
     }
 
     /// Advance simulation state by `dt`. No drawing happens here.
@@ -164,6 +270,15 @@ impl App {
             // A DVD logo picks a new colour every time it hits an edge.
             self.clock.digit_color = self.theme.accent(self.motion.bounces());
         }
+
+        if let Some(interval) = self.cycle_interval {
+            self.since_switch = self.since_switch.saturating_add(dt);
+            if self.since_switch >= interval && self.transition.is_none() {
+                let index = self.other_animation();
+                self.start_switch(index);
+            }
+        }
+        self.advance_transition(dt);
 
         self.animation.update(dt);
         self.update_fps(dt);
@@ -205,6 +320,13 @@ impl App {
         // Re-colour the animation before anything is dimmed: the theme maps
         // colours by brightness, so running it after a fade would undo it.
         self.theme.apply(buf, area);
+
+        // Fade the animation layer, not the clock: a change of animation dips
+        // through black while the time stays readable.
+        let keep = self.transition_keep();
+        if keep < 1.0 {
+            render::fade_to_black(buf, area, keep);
+        }
 
         let clock_area = self.motion.rect();
 
@@ -383,13 +505,94 @@ mod tests {
     #[test]
     fn unknown_animation_is_an_error() {
         let mut cli = Cli::parse_from(["kumsaati"]);
-        cli.anim = "nope".to_owned();
+        cli.anim = Some("nope".to_owned());
         assert!(App::new(&cli).is_err());
     }
 
     #[test]
+    fn a_pinned_animation_never_changes() {
+        let mut app = app_from(&["--anim", "fire", "--seed", "1"]);
+        assert_eq!(app.cycle_interval, None);
+        for _ in 0..200 {
+            app.update(Duration::from_secs(10));
+        }
+        assert_eq!(app.animation.name(), "fire");
+        assert!(app.transition.is_none());
+    }
+
+    #[test]
+    fn cycling_changes_the_animation_through_a_fade() {
+        let mut app = app_from(&["--cycle-minutes", "1", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 40, 12));
+        let first = app.animation.name();
+        let tick = Duration::from_millis(33);
+
+        // Realistic frames rather than one huge step, which would run the
+        // whole fade at once.
+        let mut elapsed = Duration::ZERO;
+        while elapsed < Duration::from_secs(60) {
+            app.update(tick);
+            elapsed += tick;
+        }
+        assert!(app.transition.is_some(), "no fade started");
+        assert_eq!(app.animation.name(), first, "swapped too early");
+
+        // The new animation takes over at the halfway point.
+        for _ in 0..14 {
+            app.update(tick);
+        }
+        assert_ne!(app.animation.name(), first, "never swapped");
+
+        for _ in 0..20 {
+            app.update(tick);
+        }
+        assert!(app.transition.is_none(), "the fade never finished");
+        assert_eq!(app.transition_keep(), 1.0);
+    }
+
+    #[test]
+    fn a_fade_is_darkest_in_its_middle() {
+        let mut app = app_from(&["--cycle-minutes", "1", "--seed", "1"]);
+        assert_eq!(app.transition_keep(), 1.0, "no fade, full brightness");
+
+        app.start_switch(0);
+        assert!(app.transition_keep() > 0.9, "a fade starts lit");
+        app.advance_transition(TRANSITION / 2);
+        assert!(app.transition_keep() < 0.1, "a fade should dip to black");
+        app.advance_transition(TRANSITION / 2);
+        assert_eq!(app.transition_keep(), 1.0, "and come back lit");
+    }
+
+    #[test]
+    fn switching_never_picks_the_same_animation() {
+        let mut app = app_from(&["--seed", "3"]);
+        for _ in 0..200 {
+            let before = app.anim_index;
+            let next = app.other_animation();
+            assert_ne!(next, before, "cycled onto the same animation");
+            app.anim_index = next;
+        }
+    }
+
+    #[test]
+    fn a_resize_reaches_the_animation_waiting_to_fade_in() {
+        let mut app = app_from(&["--seed", "1"]);
+        app.resize(Rect::new(0, 0, 40, 12));
+        let next = app.other_animation();
+        app.start_switch(next);
+
+        let bigger = Rect::new(0, 0, 100, 30);
+        app.resize(bigger);
+        // Finish the fade, then draw: a stale layout would panic or come out
+        // clipped to the old size.
+        app.update(TRANSITION);
+        let rows = frame(&mut app, 100, 30);
+        assert_eq!(rows.len(), 30);
+    }
+
+    #[test]
     fn draws_the_animation_behind_the_clock() {
-        let mut app = app_from(&["--seed", "11"]);
+        let mut app = app_from(&["--anim", "starfield", "--seed", "11"]);
         let rows = frame(&mut app, 80, 24);
         let text = rows.join("\n");
 
@@ -405,9 +608,9 @@ mod tests {
         let (width, height) = (80u16, 24u16);
         let area = Rect::new(0, 0, width, height);
 
-        let mut bare = app_from(&["--seed", "11", "--no-backdrop"]);
+        let mut bare = app_from(&["--anim", "starfield", "--seed", "11", "--no-backdrop"]);
         let lit = frame_buffer(&mut bare, width, height);
-        let mut shaded = app_from(&["--seed", "11"]);
+        let mut shaded = app_from(&["--anim", "starfield", "--seed", "11"]);
         let dimmed = frame_buffer(&mut shaded, width, height);
 
         let box_area = backdrop_rect(shaded.clock.occupied_area(area).unwrap(), area);
@@ -435,8 +638,8 @@ mod tests {
 
     #[test]
     fn the_backdrop_never_changes_which_characters_are_drawn() {
-        let mut bare = app_from(&["--seed", "11", "--no-backdrop"]);
-        let mut shaded = app_from(&["--seed", "11"]);
+        let mut bare = app_from(&["--anim", "starfield", "--seed", "11", "--no-backdrop"]);
+        let mut shaded = app_from(&["--anim", "starfield", "--seed", "11"]);
         assert_eq!(frame(&mut bare, 80, 24), frame(&mut shaded, 80, 24));
     }
 

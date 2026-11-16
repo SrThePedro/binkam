@@ -21,12 +21,20 @@ pub struct Cli {
     pub size: Option<(u16, u16)>,
 
     /// Background animation to run.
+    ///
+    /// Left out, the screensaver starts on a random one and keeps changing.
     #[arg(
         long,
-        default_value = DEFAULT_ANIM,
         value_parser = clap::builder::PossibleValuesParser::new(crate::anim::all_names()),
     )]
-    pub anim: String,
+    pub anim: Option<String>,
+
+    /// Minutes between automatic animation changes; 0 turns it off.
+    ///
+    /// Defaults to off when --anim pins one animation, and to a few minutes
+    /// otherwise.
+    #[arg(long)]
+    pub cycle_minutes: Option<u64>,
 
     /// List the available animations and exit.
     #[arg(long)]
@@ -67,8 +75,8 @@ pub struct Cli {
     pub theme: String,
 }
 
-/// Animation used when `--anim` is not given.
-const DEFAULT_ANIM: &str = "starfield";
+/// Minutes between animation changes when nothing says otherwise.
+const DEFAULT_CYCLE_MINUTES: u64 = 3;
 
 impl Cli {
     /// Size to use for a headless frame dump, falling back to a sane default.
@@ -79,6 +87,18 @@ impl Cli {
     /// Duration of a single frame derived from [`Cli::fps`].
     pub fn frame_time(&self) -> std::time::Duration {
         std::time::Duration::from_secs_f64(1.0 / f64::from(self.fps))
+    }
+
+    /// How long to wait between animation changes, or `None` for never.
+    pub fn cycle_interval(&self) -> Option<std::time::Duration> {
+        let minutes = match self.cycle_minutes {
+            Some(minutes) => minutes,
+            // Pinning one animation turns cycling off; left to itself, the
+            // screensaver varies.
+            None if self.anim.is_some() => 0,
+            None => DEFAULT_CYCLE_MINUTES,
+        };
+        (minutes > 0).then(|| std::time::Duration::from_secs(minutes * 60))
     }
 
     /// The seed to hand animations: the one given, or a fresh one per run.
@@ -143,10 +163,33 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_a_known_animation() {
+    fn no_animation_is_pinned_by_default() {
         let cli = Cli::parse_from(["kumsaati"]);
-        assert_eq!(cli.anim, DEFAULT_ANIM);
-        assert!(crate::anim::all_names().contains(&DEFAULT_ANIM));
+        assert_eq!(cli.anim, None);
+    }
+
+    #[test]
+    fn cycling_is_on_by_default_and_off_once_an_animation_is_pinned() {
+        let roaming = Cli::parse_from(["kumsaati"]);
+        assert_eq!(
+            roaming.cycle_interval(),
+            Some(std::time::Duration::from_secs(DEFAULT_CYCLE_MINUTES * 60))
+        );
+
+        let pinned = Cli::parse_from(["kumsaati", "--anim", "fire"]);
+        assert_eq!(pinned.cycle_interval(), None);
+    }
+
+    #[test]
+    fn an_explicit_interval_wins_either_way() {
+        let forced = Cli::parse_from(["kumsaati", "--anim", "fire", "--cycle-minutes", "5"]);
+        assert_eq!(
+            forced.cycle_interval(),
+            Some(std::time::Duration::from_secs(300))
+        );
+
+        let disabled = Cli::parse_from(["kumsaati", "--cycle-minutes", "0"]);
+        assert_eq!(disabled.cycle_interval(), None);
     }
 
     #[test]

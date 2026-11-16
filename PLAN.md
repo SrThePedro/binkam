@@ -77,8 +77,8 @@ Amaç: "Ekran koruyucu" hissi.
 - [x] Saat konum modları: `center`, `bounce`, `corner`, `drift` (yavaş kayma — burn-in önleme)
       (`bounce` Faz 3'ten taşındı: saatin kendisi DVD logosu gibi sekip her çarpışmada
       renk değiştirir — bu bir arka plan animasyonu değil, saat konum modu)
-- [ ] Otomatik döngü: her N dakikada bir sonraki/rastgele animasyon
-- [ ] Geçiş efekti: eski ve yeni animasyon arasında kısa karartma (fade to black → fade in)
+- [x] Otomatik döngü: her N dakikada bir sonraki/rastgele animasyon
+- [x] Geçiş efekti: eski ve yeni animasyon arasında kısa karartma (fade to black → fade in)
 - [x] Renk temaları: `default`, `nord`, `gruvbox`, `amber`, `mono` — saat ve animasyonlar
       temadan renk alır
 - [ ] Önizleme modu (`--preview`): tuşlar çıkmaz; `n`/`p` sonraki/önceki animasyon,
