@@ -140,7 +140,11 @@ impl App {
         let position = ClockPosition::by_name(&cli.clock_position)
             .ok_or_else(|| eyre!("unknown clock position `{}`", cli.clock_position))?;
 
-        let mut clock = ClockWidget::new();
+        let mut clock = ClockWidget::new().with_format(
+            cli.show_seconds.unwrap_or(true),
+            cli.show_date.unwrap_or(true),
+            cli.hour_format().unwrap_or_default(),
+        );
         clock.digit_color = theme.clock_color();
         clock.date_color = theme.date_color();
         // Give the clock a time straight away, so its size can be measured on
@@ -163,7 +167,7 @@ impl App {
             theme,
             theme_index,
             preview: cli.preview,
-            backdrop: !cli.no_backdrop,
+            backdrop: cli.backdrop().unwrap_or(true),
             // Preview mode needs the readout to say what is on screen.
             show_fps: cli.show_fps || cli.preview,
             fps: 0.0,

@@ -33,11 +33,56 @@ const WEEKDAYS: [&str; 7] = [
     "Pazar",
 ];
 
+/// Marker added to the date line when the hours run 1 to 12.
+const BEFORE_NOON: &str = "ÖÖ";
+const AFTER_NOON: &str = "ÖS";
+
 /// Blank rows between the clock and the date line.
 const DATE_GAP: u16 = 1;
 
-/// Columns taken by the `HH:MM` fallback.
+/// Columns taken by `HH:MM`, the time without its seconds.
 const SHORT_LEN: u16 = 5;
+
+/// Whether the hours run 0 to 23 or 1 to 12.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HourFormat {
+    /// 1 to 12, with a marker on the date line.
+    H12,
+    /// 0 to 23.
+    #[default]
+    H24,
+}
+
+impl HourFormat {
+    /// The format written as the number of hours on the dial.
+    pub fn hours(self) -> u8 {
+        match self {
+            Self::H12 => 12,
+            Self::H24 => 24,
+        }
+    }
+
+    /// The format for a dial of `hours`, or `None` for anything but 12 or 24.
+    pub fn from_hours(hours: u8) -> Option<Self> {
+        match hours {
+            12 => Some(Self::H12),
+            24 => Some(Self::H24),
+            _ => None,
+        }
+    }
+
+    /// The hour to display for a 0 to 23 wall-clock hour.
+    fn hour(self, hour24: u32) -> u32 {
+        match self {
+            Self::H24 => hour24,
+            // Midnight and noon are both twelve, not zero.
+            Self::H12 => match hour24 % 12 {
+                0 => 12,
+                hour => hour,
+            },
+        }
+    }
+}
 
 /// Rows taken by clock, gap and date line together.
 const FULL_HEIGHT: u16 = GLYPH_HEIGHT + DATE_GAP + 1;
@@ -47,7 +92,12 @@ const FULL_HEIGHT: u16 = GLYPH_HEIGHT + DATE_GAP + 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Placement {
     /// Block font at `clock`, with the date line at `date` when it fits.
-    Big { clock: Rect, date: Option<Rect> },
+    /// `seconds` is false once the seconds had to go to make it fit.
+    Big {
+        clock: Rect,
+        date: Option<Rect>,
+        seconds: bool,
+    },
     /// Plain text fallback; `seconds` is false once only `HH:MM` fits.
     Small { rect: Rect, seconds: bool },
     /// Not even `HH:MM` fits.
@@ -58,7 +108,7 @@ impl Placement {
     /// The smallest rectangle covering everything this placement draws.
     fn bounds(self) -> Option<Rect> {
         match self {
-            Self::Big { clock, date } => Some(match date {
+            Self::Big { clock, date, .. } => Some(match date {
                 Some(date) => clock.union(date),
                 None => clock,
             }),
@@ -81,10 +131,19 @@ pub struct ClockWidget {
     time_text: String,
     /// For example `15 Kasım 2026, Pazar`.
     date_text: String,
-    /// The day `date_text` was built for, so it is only rebuilt at midnight.
-    date_shown: Option<NaiveDate>,
+    /// What `date_text` was built for: the day, and whether it was afternoon.
+    ///
+    /// The afternoon flag is part of the key because a 12-hour clock puts a
+    /// marker on the date line, and that changes at noon, not at midnight.
+    date_shown: Option<(NaiveDate, bool)>,
     /// Whether the blinking colon is currently lit.
     colon_visible: bool,
+    /// Whether the time carries its seconds.
+    show_seconds: bool,
+    /// Whether the date line is drawn at all.
+    show_date: bool,
+    /// Whether the hours run 0 to 23 or 1 to 12.
+    hour_format: HourFormat,
     /// Colour of the digits.
     pub digit_color: Color,
     /// Colour of the date line.
@@ -98,6 +157,9 @@ impl Default for ClockWidget {
             date_text: String::with_capacity(40),
             date_shown: None,
             colon_visible: true,
+            show_seconds: true,
+            show_date: true,
+            hour_format: HourFormat::default(),
             digit_color: Color::White,
             date_color: Color::Gray,
         }
@@ -110,6 +172,21 @@ impl ClockWidget {
         Self::default()
     }
 
+    /// Choose what the clock shows.
+    pub fn with_format(
+        mut self,
+        show_seconds: bool,
+        show_date: bool,
+        hour_format: HourFormat,
+    ) -> Self {
+        self.show_seconds = show_seconds;
+        self.show_date = show_date;
+        self.hour_format = hour_format;
+        // Any cached date line was built for the old settings.
+        self.date_shown = None;
+        self
+    }
+
     /// Point the clock at `now`, rebuilding the cached strings as needed.
     pub fn update_time(&mut self, now: NaiveDateTime) {
         self.colon_visible = now.nanosecond() < BLINK_HALF_NANOS;
@@ -120,15 +197,23 @@ impl ClockWidget {
         // Writing into a String cannot fail; the Result is there for the trait.
         let _ = write!(
             self.time_text,
-            "{:02}:{:02}:{:02}",
-            now.hour(),
-            now.minute(),
-            now.second()
+            "{:02}:{:02}",
+            self.hour_format.hour(now.hour()),
+            now.minute()
         );
+        if self.show_seconds {
+            let _ = write!(self.time_text, ":{:02}", now.second());
+        }
 
+        let afternoon = now.hour() >= 12;
         let date = now.date();
-        if self.date_shown != Some(date) {
-            self.date_shown = Some(date);
+        if !self.show_date {
+            self.date_text.clear();
+            self.date_shown = None;
+            return;
+        }
+        if self.date_shown != Some((date, afternoon)) {
+            self.date_shown = Some((date, afternoon));
             self.date_text.clear();
             let _ = write!(
                 self.date_text,
@@ -138,6 +223,12 @@ impl ClockWidget {
                 date.year(),
                 WEEKDAYS[date.weekday().num_days_from_monday() as usize],
             );
+            if self.hour_format == HourFormat::H12 {
+                // The big font has only digits, so the only place to say
+                // which half of the day it is, is the date line.
+                let marker = if afternoon { AFTER_NOON } else { BEFORE_NOON };
+                let _ = write!(self.date_text, " · {marker}");
+            }
         }
     }
 
@@ -157,12 +248,26 @@ impl ClockWidget {
         (width, FULL_HEIGHT)
     }
 
+    /// The time as shown, with or without its seconds.
+    ///
+    /// `time_text` is ASCII, so slicing it by bytes is slicing by columns.
+    /// Asking for seconds that are switched off simply gets `HH:MM`.
+    fn time_slice(&self, seconds: bool) -> &str {
+        if seconds {
+            &self.time_text
+        } else {
+            self.time_text
+                .get(..usize::from(SHORT_LEN))
+                .unwrap_or(&self.time_text)
+        }
+    }
+
     /// Draw the block digits with their top-left corner at `(x, y)`.
-    fn render_big(&self, x: u16, y: u16, area: Rect, buf: &mut Buffer) {
+    fn render_big(&self, text: &str, x: u16, y: u16, area: Rect, buf: &mut Buffer) {
         let style = Style::new().fg(self.digit_color);
         let mut cursor = x;
 
-        for ch in self.time_text.chars() {
+        for ch in text.chars() {
             let Some(glyph) = font::glyph(ch) else {
                 continue;
             };
@@ -200,10 +305,24 @@ impl ClockWidget {
             return Placement::Hidden;
         }
 
-        let clock_width = font::text_width(&self.time_text);
         let date_width = text_cols(&self.date_text);
 
-        if clock_width > 0 && area.width >= clock_width && area.height >= GLYPH_HEIGHT {
+        // Prefer the full time in the block font; if it is too wide, try
+        // again without the seconds before falling back to plain text.
+        let wide = font::text_width(self.time_slice(true));
+        let narrow = font::text_width(self.time_slice(false));
+        let big = if area.width >= wide {
+            Some((wide, true))
+        } else if area.width >= narrow {
+            Some((narrow, false))
+        } else {
+            None
+        };
+
+        if let Some((clock_width, seconds)) = big
+            && clock_width > 0
+            && area.height >= GLYPH_HEIGHT
+        {
             let with_date =
                 date_width > 0 && area.height >= FULL_HEIGHT && area.width >= date_width;
             let height = if with_date { FULL_HEIGHT } else { GLYPH_HEIGHT };
@@ -224,15 +343,16 @@ impl ClockWidget {
                         1,
                     )
                 }),
+                seconds,
             };
         }
 
         // Too small for the block font: drop the seconds, then give up.
-        let full_width = text_cols(&self.time_text);
+        let full_width = text_cols(self.time_slice(true));
         let (width, seconds) = if area.width >= full_width {
             (full_width, true)
         } else {
-            (SHORT_LEN, false)
+            (text_cols(self.time_slice(false)), false)
         };
         if width == 0 || area.width < width {
             return Placement::Hidden;
@@ -273,8 +393,12 @@ impl ClockWidget {
 impl Widget for &ClockWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
         match self.placement(area) {
-            Placement::Big { clock, date } => {
-                self.render_big(clock.x, clock.y, area, buf);
+            Placement::Big {
+                clock,
+                date,
+                seconds,
+            } => {
+                self.render_big(self.time_slice(seconds), clock.x, clock.y, area, buf);
                 if let Some(date) = date {
                     buf.set_string(
                         date.x,
@@ -285,13 +409,7 @@ impl Widget for &ClockWidget {
                 }
             }
             Placement::Small { rect, seconds } => {
-                let full = self.time_text.as_str();
-                // `time_text` is ASCII, so byte slicing is column slicing.
-                let text = if seconds {
-                    full
-                } else {
-                    full.get(..usize::from(SHORT_LEN)).unwrap_or(full)
-                };
+                let text = self.time_slice(seconds);
                 buf.set_string(rect.x, rect.y, text, Style::new().fg(self.digit_color));
             }
             Placement::Hidden => {}
@@ -448,11 +566,102 @@ mod tests {
     }
 
     #[test]
+    fn hour_formats_round_trip_through_their_dial_size() {
+        for format in [HourFormat::H12, HourFormat::H24] {
+            assert_eq!(HourFormat::from_hours(format.hours()), Some(format));
+        }
+        assert_eq!(HourFormat::from_hours(13), None);
+        assert_eq!(HourFormat::default(), HourFormat::H24);
+    }
+
+    #[test]
+    fn seconds_can_be_switched_off() {
+        let mut clock = ClockWidget::new().with_format(false, true, HourFormat::H24);
+        clock.update_time(at(2026, 11, 15, 12, 34, 56, 0));
+        assert_eq!(clock.time_text(), "12:34");
+    }
+
+    #[test]
+    fn the_date_line_can_be_switched_off() {
+        let mut clock = ClockWidget::new().with_format(true, false, HourFormat::H24);
+        clock.update_time(at(2026, 11, 15, 12, 34, 56, 0));
+        assert_eq!(clock.date_text(), "");
+
+        let rows = rows(&clock, 80, 24);
+        assert!(rows.iter().any(|r| r.contains('█')), "the clock went too");
+        assert!(!rows.iter().any(|r| r.contains("Kasım")));
+    }
+
+    #[test]
+    fn twelve_hour_format_renumbers_the_hours() {
+        let twelve = |hour| {
+            let mut clock = ClockWidget::new().with_format(true, true, HourFormat::H12);
+            clock.update_time(at(2026, 11, 15, hour, 5, 0, 0));
+            clock
+        };
+
+        assert_eq!(twelve(0).time_text(), "12:05:00", "midnight is twelve");
+        assert_eq!(twelve(1).time_text(), "01:05:00");
+        assert_eq!(twelve(12).time_text(), "12:05:00", "noon is twelve");
+        assert_eq!(twelve(13).time_text(), "01:05:00");
+        assert_eq!(twelve(23).time_text(), "11:05:00");
+    }
+
+    #[test]
+    fn twelve_hour_format_marks_the_half_of_the_day() {
+        let mut clock = ClockWidget::new().with_format(true, true, HourFormat::H12);
+        clock.update_time(at(2026, 11, 15, 9, 0, 0, 0));
+        assert_eq!(clock.date_text(), "15 Kasım 2026, Pazar · ÖÖ");
+
+        // The marker has to follow noon, not just midnight: the cached date
+        // line is keyed on the half of the day as well as the date.
+        clock.update_time(at(2026, 11, 15, 15, 0, 0, 0));
+        assert_eq!(clock.date_text(), "15 Kasım 2026, Pazar · ÖS");
+    }
+
+    #[test]
+    fn a_24_hour_clock_has_no_marker() {
+        let clock = clock_at(at(2026, 11, 15, 15, 0, 0, 0));
+        assert_eq!(clock.date_text(), "15 Kasım 2026, Pazar");
+    }
+
+    #[test]
+    fn the_block_font_drops_seconds_before_giving_up() {
+        let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
+        // 47 columns for HH:MM:SS, 30 for HH:MM.
+        assert_eq!(font::text_width("12:34:56"), 47);
+        assert_eq!(font::text_width("12:34"), 30);
+
+        let wide = rows(&clock, 47, 5).join("\n");
+        assert!(wide.contains('█'));
+
+        // Between the two widths the seconds go but the block font stays.
+        let narrow = rows(&clock, 40, 5).join("\n");
+        assert!(narrow.contains('█'), "fell back to plain text too early");
+        assert_eq!(clock.measure(Rect::new(0, 0, 40, 5)), (30, 5));
+
+        // Below that, plain text.
+        let tiny = rows(&clock, 20, 5).join("\n");
+        assert!(!tiny.contains('█'));
+        assert!(tiny.contains("12:34:56"));
+    }
+
+    #[test]
+    fn dropping_the_seconds_keeps_the_colon_blinking() {
+        let dark = rows(&clock_at(at(2026, 11, 15, 12, 34, 56, 700_000_000)), 40, 5);
+        let lit = rows(&clock_at(at(2026, 11, 15, 12, 34, 56, 0)), 40, 5);
+        let count = |rs: &[String]| rs.join("").matches('█').count();
+        assert!(count(&lit) > count(&dark));
+    }
+
+    #[test]
     fn measure_is_stable_when_fed_back_in() {
         let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
         for area in [
             Rect::new(0, 0, 80, 24),
             Rect::new(0, 0, 47, 5),
+            Rect::new(0, 0, 40, 7),
+            Rect::new(0, 0, 30, 5),
             Rect::new(0, 0, 20, 5),
             Rect::new(0, 0, 6, 3),
         ] {

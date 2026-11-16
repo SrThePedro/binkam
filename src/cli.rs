@@ -2,6 +2,8 @@
 
 use clap::Parser;
 
+use crate::clock::HourFormat;
+
 /// An animated, clock-centered terminal screensaver.
 #[derive(Debug, Parser)]
 #[command(name = "kumsaati", version, about)]
@@ -52,9 +54,25 @@ pub struct Cli {
     #[arg(long)]
     pub show_fps: bool,
 
-    /// Do not darken the animation behind the clock.
-    #[arg(long)]
+    /// Darken the animation behind the clock, so the digits stay legible.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
+    pub backdrop: Option<bool>,
+
+    /// Shorthand for `--backdrop false`.
+    #[arg(long, conflicts_with = "backdrop")]
     pub no_backdrop: bool,
+
+    /// Show the seconds as part of the time.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
+    pub show_seconds: Option<bool>,
+
+    /// Show the date underneath the clock.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
+    pub show_date: Option<bool>,
+
+    /// Hours on the dial: 24 for 00-23, 12 for 01-12.
+    #[arg(long, value_name = "HOURS", value_parser = ["12", "24"])]
+    pub hour_format: Option<String>,
 
     /// Where the clock sits on screen, and whether it moves.
     #[arg(
@@ -94,6 +112,24 @@ impl Cli {
     /// Duration of a single frame derived from [`Cli::fps`].
     pub fn frame_time(&self) -> std::time::Duration {
         std::time::Duration::from_secs_f64(1.0 / f64::from(self.fps))
+    }
+
+    /// Whether to darken behind the clock, or `None` to leave it to the
+    /// config file.
+    pub fn backdrop(&self) -> Option<bool> {
+        if self.no_backdrop {
+            Some(false)
+        } else {
+            self.backdrop
+        }
+    }
+
+    /// The hour format asked for, or `None` to leave it to the config file.
+    ///
+    /// The value parser has already limited this to `12` or `24`.
+    pub fn hour_format(&self) -> Option<HourFormat> {
+        let hours = self.hour_format.as_deref()?.parse().ok()?;
+        HourFormat::from_hours(hours)
     }
 
     /// How long to wait between animation changes, or `None` for never.
@@ -185,6 +221,38 @@ mod tests {
 
         let pinned = Cli::parse_from(["kumsaati", "--anim", "fire"]);
         assert_eq!(pinned.cycle_interval(), None);
+    }
+
+    #[test]
+    fn backdrop_has_three_states() {
+        assert_eq!(Cli::parse_from(["kumsaati"]).backdrop(), None);
+        assert_eq!(
+            Cli::parse_from(["kumsaati", "--backdrop"]).backdrop(),
+            Some(true)
+        );
+        assert_eq!(
+            Cli::parse_from(["kumsaati", "--backdrop", "false"]).backdrop(),
+            Some(false)
+        );
+        assert_eq!(
+            Cli::parse_from(["kumsaati", "--no-backdrop"]).backdrop(),
+            Some(false)
+        );
+        assert!(Cli::try_parse_from(["kumsaati", "--backdrop", "--no-backdrop"]).is_err());
+    }
+
+    #[test]
+    fn hour_format_accepts_only_twelve_or_twenty_four() {
+        assert_eq!(Cli::parse_from(["kumsaati"]).hour_format(), None);
+        assert_eq!(
+            Cli::parse_from(["kumsaati", "--hour-format", "12"]).hour_format(),
+            Some(HourFormat::H12)
+        );
+        assert_eq!(
+            Cli::parse_from(["kumsaati", "--hour-format", "24"]).hour_format(),
+            Some(HourFormat::H24)
+        );
+        assert!(Cli::try_parse_from(["kumsaati", "--hour-format", "13"]).is_err());
     }
 
     #[test]
