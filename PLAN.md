@@ -60,7 +60,7 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 
 - [x] `matrix` — yeşil karakter yağmuru, kuyruk solması
 - [x] `fire` — DOOM tarzı ateş (half-block, ısı paleti)
-- [ ] `plasma` — sinüs tabanlı truecolor plazma
+- [x] `plasma` — sinüs tabanlı truecolor plazma
 - [ ] `bounce` — saatin kendisi DVD logosu gibi kenarlardan seker, her çarpışmada renk değişir
 - [ ] `life` — Conway's Game of Life (half-block), durağanlaşınca yeniden tohumla
 - [ ] (opsiyonel) `pipes`, `rain`, `snow`, `waves`

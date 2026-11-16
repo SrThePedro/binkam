@@ -2,6 +2,7 @@
 
 pub mod fire;
 pub mod matrix;
+pub mod plasma;
 pub mod starfield;
 
 use std::time::Duration;
@@ -29,7 +30,7 @@ pub trait Animation {
 
 /// Every animation name, in the order they are offered to the user.
 pub const fn all_names() -> &'static [&'static str] {
-    &["fire", "matrix", "starfield"]
+    &["fire", "matrix", "plasma", "starfield"]
 }
 
 /// Build the animation called `name`, seeded with `seed`.
@@ -41,6 +42,7 @@ pub fn by_name(name: &str, seed: u64) -> Option<Box<dyn Animation>> {
     match name {
         "fire" => Some(Box::new(fire::Fire::new(seed))),
         "matrix" => Some(Box::new(matrix::Matrix::new(seed))),
+        "plasma" => Some(Box::new(plasma::Plasma::new(seed))),
         "starfield" => Some(Box::new(starfield::Starfield::new(seed))),
         _ => None,
     }
