@@ -26,12 +26,12 @@ Amaç: Boş ama sağlam bir döngü. Terminal asla bozuk kalmasın.
 ## Faz 1 — Büyük saat
 Amaç: Ortada okunaklı, büyük bir dijital saat.
 
-- [ ] `clock/font.rs`: 0-9 ve `:` için blok karakter fontu (ör. 6x5, `█` ile)
-- [ ] `ClockWidget` (`Widget` trait'i): `HH:MM:SS`, `Layout` + `Flex::Center` ile ortalama
-- [ ] İki nokta saniyede bir yanıp söner
-- [ ] Altında Türkçe tarih: `15 Kasım 2026, Pazar` (gün/ay isimleri elle tanımlı dizilerden)
-- [ ] Boyut değişimine uyum; sığmazsa küçük `HH:MM` metnine düş
-- [ ] Testler: font genişliği/yüksekliği, Türkçe tarih biçimi, küçük alanda çökmeme
+- [x] `clock/font.rs`: 0-9 ve `:` için blok karakter fontu (ör. 6x5, `█` ile)
+- [x] `ClockWidget` (`Widget` trait'i): `HH:MM:SS`, `Layout` + `Flex::Center` ile ortalama
+- [x] İki nokta saniyede bir yanıp söner
+- [x] Altında Türkçe tarih: `15 Kasım 2026, Pazar` (gün/ay isimleri elle tanımlı dizilerden)
+- [x] Boyut değişimine uyum; sığmazsa küçük `HH:MM` metnine düş
+- [x] Testler: font genişliği/yüksekliği, Türkçe tarih biçimi, küçük alanda çökmeme
       (`TestBackend` ile)
 
 **Bitti:** Saat ortada, her saniye güncelleniyor, pencere boyutlandırınca bozulmuyor.

@@ -2,6 +2,7 @@
 
 mod app;
 mod cli;
+mod clock;
 
 use clap::Parser;
 

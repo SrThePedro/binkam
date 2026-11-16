@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 
+use chrono::Local;
 use ratatui::{
     DefaultTerminal, Frame, Terminal,
     backend::TestBackend,
@@ -11,7 +12,7 @@ use ratatui::{
     widgets::Block,
 };
 
-use crate::cli::Cli;
+use crate::{cli::Cli, clock::ClockWidget};
 
 /// Events arriving within this window after startup are ignored.
 ///
@@ -28,6 +29,8 @@ pub struct App {
     frame_time: Duration,
     /// Time accumulated since the first frame, used for the grace period.
     uptime: Duration,
+    /// The big clock drawn in the middle of the screen.
+    clock: ClockWidget,
 }
 
 impl App {
@@ -37,6 +40,7 @@ impl App {
             running: true,
             frame_time: cli.frame_time(),
             uptime: Duration::ZERO,
+            clock: ClockWidget::new(),
         }
     }
 
@@ -69,15 +73,16 @@ impl App {
     /// Advance simulation state by `dt`. No drawing happens here.
     pub fn update(&mut self, dt: Duration) {
         self.uptime = self.uptime.saturating_add(dt);
+        // `naive_local` hands the widget wall-clock time in the user's zone.
+        self.clock.update_time(Local::now().naive_local());
     }
 
     /// Draw the current state. Must not mutate anything.
     pub fn render(&self, frame: &mut Frame) {
-        // Phase 0: an honest black screen. Animations land on top of this later.
-        frame.render_widget(
-            Block::new().style(Style::new().bg(Color::Black)),
-            frame.area(),
-        );
+        let area = frame.area();
+        // Animations will slot in between these two from phase 2 on.
+        frame.render_widget(Block::new().style(Style::new().bg(Color::Black)), area);
+        frame.render_widget(&self.clock, area);
     }
 
     /// React to a terminal event; any key press quits once the grace period is over.
