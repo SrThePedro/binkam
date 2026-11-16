@@ -81,7 +81,7 @@ Amaç: "Ekran koruyucu" hissi.
 - [x] Geçiş efekti: eski ve yeni animasyon arasında kısa karartma (fade to black → fade in)
 - [x] Renk temaları: `default`, `nord`, `gruvbox`, `amber`, `mono` — saat ve animasyonlar
       temadan renk alır
-- [ ] Önizleme modu (`--preview`): tuşlar çıkmaz; `n`/`p` sonraki/önceki animasyon,
+- [x] Önizleme modu (`--preview`): tuşlar çıkmaz; `n`/`p` sonraki/önceki animasyon,
       `t` tema, `q`/`Esc` çıkış
 
 **Bitti:** Uzun süre açık bırakıldığında kendi kendine çeşitleniyor; önizleme modunda tüm

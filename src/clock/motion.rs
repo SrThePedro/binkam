@@ -116,6 +116,12 @@ impl ClockMotion {
         self.position
     }
 
+    /// Switch mode, carrying the current position over as a starting point.
+    pub fn set_position(&mut self, position: ClockPosition) {
+        self.position = position;
+        self.settle();
+    }
+
     /// How many edges have been hit so far.
     pub fn bounces(&self) -> usize {
         self.bounces
@@ -369,6 +375,14 @@ mod tests {
             "{}",
             motion.phase
         );
+    }
+
+    #[test]
+    fn switching_mode_repositions_at_once() {
+        let mut motion = motion(ClockPosition::Center);
+        motion.set_position(ClockPosition::Corner);
+        assert_eq!(motion.position(), ClockPosition::Corner);
+        assert_eq!(motion.rect(), Rect::new(31, 16, 47, 7));
     }
 
     #[test]

@@ -12,7 +12,7 @@ use ratatui::{
     DefaultTerminal, Frame, Terminal,
     backend::TestBackend,
     buffer::Buffer,
-    crossterm::event::{self, Event, KeyEventKind},
+    crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Widget as _},
@@ -42,6 +42,10 @@ const BACKDROP_PAD_Y: u16 = 1;
 /// Fraction of brightness left in the animation behind the clock.
 const BACKDROP_KEEP: f32 = 0.28;
 
+/// Fraction left behind the one-line readouts, which are small enough to be
+/// swallowed by a busy animation without this.
+const OVERLAY_KEEP: f32 = 0.12;
+
 /// Weight of the newest sample in the smoothed frames-per-second estimate.
 const FPS_SMOOTHING: f32 = 0.1;
 
@@ -51,6 +55,9 @@ const DUMP_WARMUP_FRAMES: u32 = 90;
 
 /// How long a change of animation takes, from lit through black and back.
 const TRANSITION: Duration = Duration::from_millis(900);
+
+/// Key reminder shown along the bottom in preview mode.
+const PREVIEW_HINT: &str = "n/p animation · t theme · c position · q quit";
 
 /// A change from one animation to the next, fading out and back in.
 struct Transition {
@@ -93,7 +100,11 @@ pub struct App {
     since_switch: Duration,
     /// The fade in progress, if any.
     transition: Option<Transition>,
-    /// Whether to draw the frames-per-second counter.
+    /// Index of the running theme in `Theme::all_names`.
+    theme_index: usize,
+    /// Whether keys browse the combinations instead of quitting.
+    preview: bool,
+    /// Whether to draw the status and frames-per-second readout.
     show_fps: bool,
     /// Smoothed frames per second.
     fps: f32,
@@ -118,7 +129,12 @@ impl App {
         let animation = crate::anim::by_name(names[anim_index], rng.random::<u64>())
             .ok_or_else(|| eyre!("unknown animation `{}`; try --list", names[anim_index]))?;
 
-        let theme = Theme::by_name(&cli.theme)
+        let theme_names = Theme::all_names();
+        let theme_index = theme_names
+            .iter()
+            .position(|known| *known == cli.theme)
+            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
+        let theme = Theme::by_name(theme_names[theme_index])
             .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
 
         let position = ClockPosition::by_name(&cli.clock_position)
@@ -145,8 +161,11 @@ impl App {
             since_switch: Duration::ZERO,
             transition: None,
             theme,
+            theme_index,
+            preview: cli.preview,
             backdrop: !cli.no_backdrop,
-            show_fps: cli.show_fps,
+            // Preview mode needs the readout to say what is on screen.
+            show_fps: cli.show_fps || cli.preview,
             fps: 0.0,
             fps_text: String::with_capacity(8),
         })
@@ -339,6 +358,7 @@ impl App {
 
         self.clock.render(clock_area, buf);
         self.render_fps(area, buf);
+        self.render_hint(area, buf);
     }
 
     /// Draw the counter in the top right corner, if it is enabled.
@@ -350,25 +370,87 @@ impl App {
         if width == 0 || area.width < width || area.height == 0 {
             return;
         }
-        buf.set_string(
-            area.right() - width,
-            area.y,
-            &self.fps_text,
-            Style::new().fg(Color::DarkGray),
-        );
+        let x = area.right() - width;
+        render::fade_to_black(buf, Rect::new(x, area.y, width, 1), OVERLAY_KEEP);
+        buf.set_string(x, area.y, &self.fps_text, Style::new().fg(Color::DarkGray));
     }
 
-    /// React to a terminal event; any key press quits once the grace period is over.
+    /// React to a terminal event.
+    ///
+    /// Outside preview mode any key press quits, once the grace period is
+    /// over. Resize, mouse, focus and paste events never are a reason to.
     fn handle_event(&mut self, event: &Event) {
         if self.uptime < GRACE_PERIOD {
             return;
         }
-        match event {
-            // On Windows every key arrives twice (Press and Release); only Press counts.
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.running = false,
-            // Resize, mouse, focus and paste events are not a reason to quit.
+        // On Windows every key arrives twice (Press and Release); only Press
+        // counts, or the program would quit the moment it started.
+        let Event::Key(key) = event else { return };
+        if key.kind != KeyEventKind::Press {
+            return;
+        }
+
+        if !self.preview {
+            self.running = false;
+            return;
+        }
+
+        let count = crate::anim::all_names().len();
+        match key.code {
+            KeyCode::Char('q' | 'Q') | KeyCode::Esc => self.running = false,
+            KeyCode::Char('n' | 'N') | KeyCode::Right => self.start_switch(self.anim_index + 1),
+            KeyCode::Char('p' | 'P') | KeyCode::Left => {
+                self.start_switch(self.anim_index + count - 1);
+            }
+            KeyCode::Char('t' | 'T') => self.next_theme(),
+            KeyCode::Char('c' | 'C') => self.next_clock_position(),
             _ => {}
         }
+    }
+
+    /// Move on to the next theme in the list.
+    fn next_theme(&mut self) {
+        let names = Theme::all_names();
+        self.theme_index = (self.theme_index + 1) % names.len();
+        if let Some(theme) = Theme::by_name(names[self.theme_index]) {
+            self.theme = theme;
+            self.clock.date_color = self.theme.date_color();
+            // Bounce paints the digits itself, from the new theme's accents.
+            if self.motion.position() != ClockPosition::Bounce {
+                self.clock.digit_color = self.theme.clock_color();
+            }
+        }
+    }
+
+    /// Move the clock on to the next position mode.
+    fn next_clock_position(&mut self) {
+        let names = ClockPosition::all_names();
+        let current = self.motion.position().name();
+        let index = names.iter().position(|name| *name == current).unwrap_or(0);
+        let Some(position) = ClockPosition::by_name(names[(index + 1) % names.len()]) else {
+            return;
+        };
+
+        self.motion.set_position(position);
+        if position != ClockPosition::Bounce {
+            // Take back the digit colour that bounce was cycling.
+            self.clock.digit_color = self.theme.clock_color();
+        }
+    }
+
+    /// Draw the key reminder along the bottom, in preview mode only.
+    fn render_hint(&self, area: Rect, buf: &mut Buffer) {
+        if !self.preview || area.height == 0 {
+            return;
+        }
+        let width = render::text_cols(PREVIEW_HINT);
+        if area.width < width {
+            return;
+        }
+        let x = area.x + (area.width - width) / 2;
+        let y = area.bottom() - 1;
+        render::fade_to_black(buf, Rect::new(x, y, width, 1), OVERLAY_KEEP);
+        buf.set_string(x, y, PREVIEW_HINT, Style::new().fg(Color::DarkGray));
     }
 }
 
@@ -650,6 +732,125 @@ mod tests {
 
         let mut on = app_from(&["--seed", "3", "--show-fps"]);
         assert!(frame(&mut on, 80, 24)[0].trim_end().ends_with("fps"));
+    }
+
+    fn key_code(code: KeyCode) -> Event {
+        Event::Key(KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        })
+    }
+
+    /// An app in preview mode, past the grace period.
+    fn preview() -> App {
+        let mut app = app_from(&["--preview", "--anim", "starfield", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
+        app
+    }
+
+    #[test]
+    fn preview_ignores_keys_that_mean_nothing() {
+        let mut app = preview();
+        for code in [KeyCode::Char('x'), KeyCode::Enter, KeyCode::Char(' ')] {
+            app.handle_event(&key_code(code));
+            assert!(app.running, "{code:?} should not quit in preview mode");
+        }
+    }
+
+    #[test]
+    fn preview_quits_on_q_and_escape() {
+        for code in [KeyCode::Char('q'), KeyCode::Char('Q'), KeyCode::Esc] {
+            let mut app = preview();
+            app.handle_event(&key_code(code));
+            assert!(!app.running, "{code:?} should quit");
+        }
+    }
+
+    #[test]
+    fn preview_steps_through_the_animations() {
+        let names = crate::anim::all_names();
+        let mut app = preview();
+        let start = app.anim_index;
+
+        app.handle_event(&key_code(KeyCode::Char('n')));
+        assert_eq!(app.anim_index, (start + 1) % names.len());
+
+        app.handle_event(&key_code(KeyCode::Char('p')));
+        app.handle_event(&key_code(KeyCode::Char('p')));
+        assert_eq!(app.anim_index, (start + names.len() - 1) % names.len());
+
+        // And the change actually lands once the fade reaches its middle.
+        app.update(TRANSITION);
+        assert_eq!(app.animation.name(), names[app.anim_index]);
+    }
+
+    #[test]
+    fn preview_steps_through_the_themes() {
+        let names = Theme::all_names();
+        let mut app = preview();
+        let start = app.theme_index;
+
+        for step in 1..=names.len() {
+            app.handle_event(&key_code(KeyCode::Char('t')));
+            let expected = (start + step) % names.len();
+            assert_eq!(app.theme_index, expected);
+            assert_eq!(app.theme.name(), names[expected]);
+        }
+        assert_eq!(app.theme_index, start, "the themes should wrap round");
+    }
+
+    #[test]
+    fn preview_steps_through_the_clock_positions() {
+        let names = ClockPosition::all_names();
+        let mut app = preview();
+        let start = app.motion.position().name();
+        let index = names.iter().position(|n| *n == start).unwrap();
+
+        for step in 1..=names.len() {
+            app.handle_event(&key_code(KeyCode::Char('c')));
+            assert_eq!(
+                app.motion.position().name(),
+                names[(index + step) % names.len()]
+            );
+        }
+        assert_eq!(app.motion.position().name(), start, "should wrap round");
+    }
+
+    #[test]
+    fn leaving_bounce_restores_the_theme_colour() {
+        let mut app = app_from(&["--preview", "--clock-position", "bounce", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
+        // Run far enough to hit an edge and take an accent colour.
+        for _ in 0..400 {
+            app.update(Duration::from_millis(33));
+        }
+        assert!(app.motion.bounces() > 0, "never hit an edge");
+
+        app.handle_event(&key_code(KeyCode::Char('c')));
+        assert_ne!(app.motion.position(), ClockPosition::Bounce);
+        assert_eq!(app.clock.digit_color, app.theme.clock_color());
+    }
+
+    #[test]
+    fn preview_shows_the_keys_and_the_status() {
+        let mut app = preview();
+        let rows = frame(&mut app, 80, 24);
+        assert!(rows[23].contains("q quit"), "no key hint: {:?}", rows[23]);
+        assert!(rows[0].contains("starfield"), "no status: {:?}", rows[0]);
+    }
+
+    #[test]
+    fn outside_preview_every_key_still_quits() {
+        for code in [KeyCode::Char('n'), KeyCode::Char('t'), KeyCode::Enter] {
+            let mut app = app_from(&["--anim", "starfield"]);
+            app.update(GRACE_PERIOD);
+            app.handle_event(&key_code(code));
+            assert!(!app.running, "{code:?} should quit outside preview mode");
+        }
     }
 
     #[test]

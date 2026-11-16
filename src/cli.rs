@@ -66,6 +66,13 @@ pub struct Cli {
     )]
     pub clock_position: String,
 
+    /// Browse animations and themes instead of quitting on a key press.
+    ///
+    /// n and p change animation, t the theme, c where the clock sits, and
+    /// q or Esc quits.
+    #[arg(long)]
+    pub preview: bool,
+
     /// Colour theme for the clock and the animations.
     #[arg(
         long,
@@ -93,9 +100,9 @@ impl Cli {
     pub fn cycle_interval(&self) -> Option<std::time::Duration> {
         let minutes = match self.cycle_minutes {
             Some(minutes) => minutes,
-            // Pinning one animation turns cycling off; left to itself, the
-            // screensaver varies.
-            None if self.anim.is_some() => 0,
+            // Pinning one animation turns cycling off, and so does preview
+            // mode, where changing animation is the user's job.
+            None if self.anim.is_some() || self.preview => 0,
             None => DEFAULT_CYCLE_MINUTES,
         };
         (minutes > 0).then(|| std::time::Duration::from_secs(minutes * 60))
@@ -178,6 +185,12 @@ mod tests {
 
         let pinned = Cli::parse_from(["kumsaati", "--anim", "fire"]);
         assert_eq!(pinned.cycle_interval(), None);
+    }
+
+    #[test]
+    fn preview_mode_does_not_cycle_on_its_own() {
+        let cli = Cli::parse_from(["kumsaati", "--preview"]);
+        assert_eq!(cli.cycle_interval(), None);
     }
 
     #[test]
