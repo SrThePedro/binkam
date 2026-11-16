@@ -112,7 +112,7 @@ Amaç: Her terminalde düzgün, hafif.
 - [x] Fare hareketi/tıklama ile çıkış (mouse capture aç, çıkışta mutlaka kapat)
 - [ ] CPU ölçümü (release, 30 FPS, 200x50): her animasyon için not et; ağır olanı optimize et
       (render'da allocation yok, gereksiz `Color::Rgb` hesapları önbellekte)
-- [ ] Çok küçük / çok büyük terminal, hızlı yeniden boyutlandırma testleri
+- [x] Çok küçük / çok büyük terminal, hızlı yeniden boyutlandırma testleri
 - [ ] Windows Terminal + PowerShell'de elle test (kullanıcı)
 - [ ] `clippy::pedantic` uyarılarını gözden geçir (hepsini değil, anlamlı olanları düzelt)
 - [ ] README: kurulum, kullanım, ekran görüntüsü/GIF (ör. `vhs` ile)

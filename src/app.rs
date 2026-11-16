@@ -1000,6 +1000,97 @@ mod tests {
         );
     }
 
+    /// Sizes worth being rude with: degenerate, exactly on a fallback
+    /// boundary, and far larger than any real terminal.
+    const AWKWARD_SIZES: [(u16, u16); 12] = [
+        (1, 1),
+        (2, 1),
+        (1, 2),
+        (3, 2),
+        (5, 1),
+        (20, 6),
+        (30, 5),
+        (47, 5),
+        (47, 7),
+        (80, 24),
+        (300, 2),
+        (300, 100),
+    ];
+
+    #[test]
+    fn every_animation_survives_every_awkward_size() {
+        for name in crate::anim::all_names() {
+            let mut app = app_from(&["--anim", name, "--seed", "1", "--show-fps"]);
+            for (width, height) in AWKWARD_SIZES {
+                let rows = frame(&mut app, width, height);
+                assert_eq!(
+                    rows.len(),
+                    usize::from(height),
+                    "{name} at {width}x{height}"
+                );
+                assert!(
+                    rows.iter()
+                        .all(|row| row.chars().count() == usize::from(width)),
+                    "{name} at {width}x{height} drew a ragged frame"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_clock_position_survives_every_awkward_size() {
+        for position in ClockPosition::all_names() {
+            let mut app = app_from(&[
+                "--clock-position",
+                position,
+                "--anim",
+                "starfield",
+                "--seed",
+                "1",
+            ]);
+            for (width, height) in AWKWARD_SIZES {
+                let rows = frame(&mut app, width, height);
+                assert_eq!(
+                    rows.len(),
+                    usize::from(height),
+                    "{position} at {width}x{height}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn resizing_on_every_frame_is_survivable() {
+        // Someone dragging a window corner, with the clock and a changing
+        // animation both having to keep up.
+        let mut app = app_from(&["--cycle-minutes", "1", "--seed", "2"]);
+        for round in 0..8 {
+            for (width, height) in AWKWARD_SIZES {
+                let rows = frame(&mut app, width, height);
+                assert_eq!(
+                    rows.len(),
+                    usize::from(height),
+                    "round {round} at {width}x{height}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_resize_in_the_middle_of_a_fade_is_survivable() {
+        let mut app = app_from(&["--seed", "4"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        let next = app.other_animation();
+        app.start_switch(next);
+
+        // Resize on every frame of the fade, including right at the midpoint.
+        for (width, height) in AWKWARD_SIZES {
+            app.update(TRANSITION / 6);
+            let rows = frame(&mut app, width, height);
+            assert_eq!(rows.len(), usize::from(height));
+        }
+    }
+
     #[test]
     fn dump_renders_requested_size() {
         let cli = Cli::parse_from(["kumsaati", "--dump-frame", "--size", "20x5"]);
