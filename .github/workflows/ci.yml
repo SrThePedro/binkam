@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+      - name: Release build
+        run: cargo build --release
+
+      # The screensaver itself needs a terminal, but every headless path can
+      # be exercised, which is enough to catch a build that cannot start.
+      - name: Headless smoke test
+        run: |
+          cargo run --release -- --list
+          cargo run --release -- --list-themes
+          cargo run --release -- --print-config
+          cargo run --release -- --dump-frame --size 80x24
+          cargo run --release -- --dump-frame --size 1x1
+          cargo run --release -- --dump-frame --anim matrix --theme nord --color 256 --size 200x50
+          cargo run --release -- --bench 60 --size 80x24

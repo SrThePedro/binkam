@@ -2,6 +2,10 @@
 name = "kumsaati"
 version = "0.1.0"
 edition = "2024"
+# let-chains, which this uses, are stable from here on.
+rust-version = "1.88"
+description = "An animated, clock-centered terminal screensaver"
+readme = "README.md"
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
