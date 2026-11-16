@@ -1,6 +1,7 @@
 //! The big centred clock and the date line underneath it.
 
 pub mod font;
+pub mod motion;
 
 use std::fmt::Write as _;
 
@@ -248,6 +249,19 @@ impl ClockWidget {
         }
     }
 
+    /// The size the clock will take inside `area`, or `(0, 0)` when nothing
+    /// fits.
+    ///
+    /// Handing this straight back as the clock's own area is stable: the
+    /// widget makes the same big-or-small decision for a rectangle that is
+    /// exactly its own size.
+    pub fn measure(&self, area: Rect) -> (u16, u16) {
+        match self.placement(area).bounds() {
+            Some(rect) => (rect.width, rect.height),
+            None => (0, 0),
+        }
+    }
+
     /// The area the clock would cover inside `area`, or `None` when it hides.
     ///
     /// The app uses this to darken just enough of the animation behind it.
@@ -431,6 +445,28 @@ mod tests {
         for (w, h) in [(0, 0), (1, 1), (3, 1), (5, 1), (4, 2), (47, 4), (46, 7)] {
             let _ = rows(&clock, w, h);
         }
+    }
+
+    #[test]
+    fn measure_is_stable_when_fed_back_in() {
+        let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
+        for area in [
+            Rect::new(0, 0, 80, 24),
+            Rect::new(0, 0, 47, 5),
+            Rect::new(0, 0, 20, 5),
+            Rect::new(0, 0, 6, 3),
+        ] {
+            let size = clock.measure(area);
+            let own = Rect::new(0, 0, size.0, size.1);
+            assert_eq!(clock.measure(own), size, "unstable for {area:?}");
+        }
+    }
+
+    #[test]
+    fn measure_gives_up_when_nothing_fits() {
+        let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
+        assert_eq!(clock.measure(Rect::new(0, 0, 4, 1)), (0, 0));
+        assert_eq!(clock.measure(Rect::ZERO), (0, 0));
     }
 
     #[test]

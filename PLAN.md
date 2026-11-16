@@ -74,7 +74,7 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 ## Faz 4 — Kompozisyon, temalar, geçişler
 Amaç: "Ekran koruyucu" hissi.
 
-- [ ] Saat konum modları: `center`, `bounce`, `corner`, `drift` (yavaş kayma — burn-in önleme)
+- [x] Saat konum modları: `center`, `bounce`, `corner`, `drift` (yavaş kayma — burn-in önleme)
       (`bounce` Faz 3'ten taşındı: saatin kendisi DVD logosu gibi sekip her çarpışmada
       renk değiştirir — bu bir arka plan animasyonu değil, saat konum modu)
 - [ ] Otomatik döngü: her N dakikada bir sonraki/rastgele animasyon

@@ -17,7 +17,16 @@ use ratatui::{
     widgets::{Block, Widget as _},
 };
 
-use crate::{anim::Animation, cli::Cli, clock::ClockWidget, render, theme::Theme};
+use crate::{
+    anim::Animation,
+    cli::Cli,
+    clock::{
+        ClockWidget,
+        motion::{ClockMotion, ClockPosition},
+    },
+    render,
+    theme::Theme,
+};
 
 /// Events arriving within this window after startup are ignored.
 ///
@@ -47,8 +56,10 @@ pub struct App {
     frame_time: Duration,
     /// Time accumulated since the first frame, used for the grace period.
     uptime: Duration,
-    /// The big clock drawn in the middle of the screen.
+    /// The big clock.
     clock: ClockWidget,
+    /// Where the clock sits, and how it moves.
+    motion: ClockMotion,
     /// The background effect, chosen by name at startup.
     ///
     /// `Box<dyn Animation>` because every effect is a different concrete type.
@@ -76,15 +87,22 @@ impl App {
         let theme = Theme::by_name(&cli.theme)
             .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
 
+        let position = ClockPosition::by_name(&cli.clock_position)
+            .ok_or_else(|| eyre!("unknown clock position `{}`", cli.clock_position))?;
+
         let mut clock = ClockWidget::new();
         clock.digit_color = theme.clock_color();
         clock.date_color = theme.date_color();
+        // Give the clock a time straight away, so its size can be measured on
+        // the very first frame instead of coming out empty.
+        clock.update_time(Local::now().naive_local());
 
         Ok(Self {
             running: true,
             frame_time: cli.frame_time(),
             uptime: Duration::ZERO,
             clock,
+            motion: ClockMotion::new(position),
             animation,
             area: Rect::ZERO,
             theme,
@@ -136,6 +154,17 @@ impl App {
         self.uptime = self.uptime.saturating_add(dt);
         // `naive_local` hands the widget wall-clock time in the user's zone.
         self.clock.update_time(Local::now().naive_local());
+
+        // Measure the clock every frame: its size changes with the terminal
+        // and, at midnight, with the length of the date line.
+        self.motion
+            .set_bounds(self.area, self.clock.measure(self.area));
+        self.motion.update(dt);
+        if self.motion.position() == ClockPosition::Bounce {
+            // A DVD logo picks a new colour every time it hits an edge.
+            self.clock.digit_color = self.theme.accent(self.motion.bounces());
+        }
+
         self.animation.update(dt);
         self.update_fps(dt);
     }
@@ -152,14 +181,15 @@ impl App {
             self.fps + (sample - self.fps) * FPS_SMOOTHING
         };
 
-        // The animation and theme ride along; they are the other things worth
-        // seeing while debugging a frame rate problem.
+        // The animation, theme and clock position ride along; they are the
+        // other things worth seeing while debugging a frame rate problem.
         self.fps_text.clear();
         let _ = write!(
             self.fps_text,
-            "{} · {} · {:.0} fps",
+            "{} · {} · {} · {:.0} fps",
             self.animation.name(),
             self.theme.name(),
+            self.motion.position().name(),
             self.fps
         );
     }
@@ -176,14 +206,16 @@ impl App {
         // colours by brightness, so running it after a fade would undo it.
         self.theme.apply(buf, area);
 
+        let clock_area = self.motion.rect();
+
         // Dim the animation just behind the clock so the digits stay legible.
         if self.backdrop
-            && let Some(clock_area) = self.clock.occupied_area(area)
+            && let Some(occupied) = self.clock.occupied_area(clock_area)
         {
-            render::fade_to_black(buf, backdrop_rect(clock_area, area), BACKDROP_KEEP);
+            render::fade_to_black(buf, backdrop_rect(occupied, area), BACKDROP_KEEP);
         }
 
-        self.clock.render(area, buf);
+        self.clock.render(clock_area, buf);
         self.render_fps(area, buf);
     }
 

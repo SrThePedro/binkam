@@ -48,6 +48,16 @@ pub struct Cli {
     #[arg(long)]
     pub no_backdrop: bool,
 
+    /// Where the clock sits on screen, and whether it moves.
+    #[arg(
+        long,
+        default_value = "center",
+        value_parser = clap::builder::PossibleValuesParser::new(
+            crate::clock::motion::ClockPosition::all_names(),
+        ),
+    )]
+    pub clock_position: String,
+
     /// Colour theme for the clock and the animations.
     #[arg(
         long,
@@ -144,6 +154,19 @@ mod tests {
         let cli = Cli::parse_from(["kumsaati"]);
         assert_eq!(cli.theme, crate::theme::DEFAULT);
         assert!(crate::theme::Theme::by_name(&cli.theme).is_some());
+    }
+
+    #[test]
+    fn defaults_to_a_known_clock_position() {
+        use crate::clock::motion::ClockPosition;
+        let cli = Cli::parse_from(["kumsaati"]);
+        assert_eq!(cli.clock_position, "center");
+        assert!(ClockPosition::by_name(&cli.clock_position).is_some());
+    }
+
+    #[test]
+    fn rejects_unknown_clock_positions() {
+        assert!(Cli::try_parse_from(["kumsaati", "--clock-position", "nope"]).is_err());
     }
 
     #[test]

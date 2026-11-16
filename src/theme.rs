@@ -16,6 +16,19 @@ use crate::render::{Rgb, luma, ramp, rgb};
 /// Theme used when `--theme` is not given.
 pub const DEFAULT: &str = "default";
 
+/// Accent colours the bouncing clock cycles through.
+///
+/// Their brightnesses are spread out on purpose: a theme maps colours by
+/// brightness, so these stay apart in every theme.
+const ACCENTS: [Rgb; 6] = [
+    (255, 255, 255),
+    (120, 200, 255),
+    (255, 170, 60),
+    (150, 240, 160),
+    (240, 120, 180),
+    (90, 120, 200),
+];
+
 /// A colour theme.
 #[derive(Debug, Clone)]
 pub struct Theme {
@@ -106,6 +119,17 @@ impl Theme {
     /// Colour for the date line.
     pub fn date_color(&self) -> Color {
         rgb(self.date)
+    }
+
+    /// One of the accent colours, taken through the theme's ramp.
+    ///
+    /// `index` wraps, so a bounce counter can be passed straight in.
+    pub fn accent(&self, index: usize) -> Color {
+        let accent = ACCENTS[index % ACCENTS.len()];
+        match &self.ramp {
+            Some(ramp) => rgb(ramp[usize::from(luma(accent))]),
+            None => rgb(accent),
+        }
     }
 
     /// Re-colour everything drawn inside `rect`.
@@ -228,6 +252,15 @@ mod tests {
             panic!("expected an Rgb colour");
         };
         assert_eq!((r, g), (g, b), "a grey has equal components");
+    }
+
+    #[test]
+    fn accents_wrap_and_stay_distinct() {
+        for name in Theme::all_names() {
+            let theme = Theme::by_name(name).unwrap();
+            assert_eq!(theme.accent(0), theme.accent(ACCENTS.len()), "{name}");
+            assert_ne!(theme.accent(0), theme.accent(1), "{name} accents collided");
+        }
     }
 
     #[test]
