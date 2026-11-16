@@ -41,6 +41,21 @@ pub fn lerp(a: Rgb, b: Rgb, t: f32) -> Color {
     Color::Rgb(r, g, b)
 }
 
+/// Wrap a coordinate that has strayed at most one step outside `limit`.
+///
+/// Only correct for an overshoot of one, which is all a neighbouring cell or
+/// a one column drift can be. Worth having rather than `rem_euclid`: that is
+/// an integer division, and in a per-pixel loop it shows up in the profile.
+pub fn wrap_by_one(value: i32, limit: i32) -> usize {
+    if value < 0 {
+        (limit - 1).max(0) as usize
+    } else if value >= limit {
+        0
+    } else {
+        value as usize
+    }
+}
+
 /// Perceived brightness of a colour, from 0 to 255.
 ///
 /// Green counts for more than red and red for more than blue, roughly the
@@ -167,6 +182,19 @@ mod tests {
         assert_eq!(lerp_rgb(a, b, -5.0), a);
         assert_eq!(lerp_rgb(a, b, 5.0), b);
         assert!(lerp_rgb(a, b, f32::NAN).0 <= 100);
+    }
+
+    #[test]
+    fn wrapping_by_one_matches_a_real_remainder() {
+        for limit in 1..8 {
+            for value in -1..=limit {
+                assert_eq!(
+                    wrap_by_one(value, limit),
+                    value.rem_euclid(limit) as usize,
+                    "value {value}, limit {limit}"
+                );
+            }
+        }
     }
 
     #[test]

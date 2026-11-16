@@ -110,6 +110,14 @@ pub struct Cli {
     #[arg(long)]
     pub list_themes: bool,
 
+    /// Time this many frames off screen, report the cost and exit.
+    ///
+    /// Build with `--release` for a number worth reading. The time covers
+    /// updating, drawing and ratatui's own diffing, but not writing to a
+    /// real terminal.
+    #[arg(long, value_name = "FRAMES", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bench: Option<u32>,
+
     /// Render a single frame to stdout as plain text and exit.
     ///
     /// Uses a headless backend, so the real terminal is never touched.
@@ -237,6 +245,7 @@ mod tests {
             vec!["--clock-position", "nope"],
             vec!["--hour-format", "13"],
             vec!["--color", "16"],
+            vec!["--bench", "0"],
             vec!["--fps", "0"],
             vec!["--fps", "9999"],
         ] {

@@ -55,6 +55,10 @@ const FPS_SMOOTHING: f32 = 0.1;
 /// settled animation rather than its first frame.
 const DUMP_WARMUP_FRAMES: u32 = 90;
 
+/// Frames run before `--bench` starts its clock, to keep one-off allocations
+/// and cold caches out of the measurement.
+const BENCH_WARMUP_FRAMES: u32 = 200;
+
 /// How long a change of animation takes, from lit through black and back.
 const TRANSITION: Duration = Duration::from_millis(900);
 
@@ -514,6 +518,40 @@ pub fn dump_frame(cli: &Cli, config: &Config) -> color_eyre::Result<()> {
     terminal.draw(|frame| app.render(frame))?;
 
     print!("{}", buffer_to_text(terminal.backend().buffer()));
+    Ok(())
+}
+
+/// Time `frames` worth of work off screen and print what it cost.
+///
+/// Uses the same headless backend as `--dump-frame`, so the real terminal is
+/// never touched; what it leaves out is the write to the terminal itself.
+pub fn bench(cli: &Cli, config: &Config, frames: u32) -> color_eyre::Result<()> {
+    let (width, height) = cli.dump_size();
+    let mut terminal = Terminal::new(TestBackend::new(width, height))?;
+    let mut app = App::new(cli, config)?;
+    app.resize(Rect::new(0, 0, width, height));
+
+    let step = config.frame_time();
+    for _ in 0..BENCH_WARMUP_FRAMES {
+        app.update(step);
+        terminal.draw(|frame| app.render(frame))?;
+    }
+
+    let started = Instant::now();
+    for _ in 0..frames {
+        app.update(step);
+        terminal.draw(|frame| app.render(frame))?;
+    }
+    let per_frame = started.elapsed().as_secs_f64() / f64::from(frames);
+
+    println!(
+        "{:<10} {:<8} {width}x{height}  {:7.1} us/frame  {:5.2}% of one core at {} fps",
+        app.animation.name(),
+        app.theme.name(),
+        per_frame * 1e6,
+        per_frame * f64::from(config.fps) * 100.0,
+        config.fps,
+    );
     Ok(())
 }
 

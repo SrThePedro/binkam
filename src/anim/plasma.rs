@@ -33,6 +33,10 @@ const WAVE_Y: f32 = 34.0;
 const WAVE_DIAGONAL: f32 = 46.0;
 const WAVE_RADIAL: f32 = 21.0;
 
+/// The radial wavelength as a reciprocal, worked out at compile time, so the
+/// hot loop multiplies instead of dividing.
+const RADIAL_SCALE: f32 = 1.0 / WAVE_RADIAL;
+
 /// Colour stops of the cyclic palette; the last must equal the first.
 const STOPS: [Rgb; 6] = [
     (26, 34, 92),
@@ -71,10 +75,16 @@ impl Plasma {
     }
 
     /// Sine of `turns`, read from the table instead of computed.
+    ///
+    /// The phase is wrapped with a bit mask rather than `rem_euclid`, which
+    /// on an `f32` compiles to a call to `fmodf`. Four of those per pixel
+    /// dominated the frame cost when it was measured.
+    ///
+    /// Casting to a signed integer first and masking afterwards is what makes
+    /// that work for a negative phase: the mask of a two's complement
+    /// negative is already its non-negative remainder.
     fn sine_at(&self, turns: f32) -> f32 {
-        // `as usize` on a non-negative float truncates, and the mask keeps the
-        // index in range even when rounding lands exactly on SIN_STEPS.
-        let step = (turns.rem_euclid(1.0) * SIN_STEPS as f32) as usize;
+        let step = (turns * SIN_STEPS as f32) as i64 as usize;
         self.sine[step & (SIN_STEPS - 1)]
     }
 
@@ -87,13 +97,12 @@ impl Plasma {
         let fy = f32::from(y);
         let dx = fx - center_x;
         let dy = fy - center_y;
-        let radius = dx.hypot(dy);
         let t = self.time;
 
         let sum = self.sine_at(fx / WAVE_X + t)
             + self.sine_at(fy / WAVE_Y + t * 1.3)
             + self.sine_at((fx + fy) / WAVE_DIAGONAL + t * 0.7)
-            + self.sine_at(radius / WAVE_RADIAL - t * 1.1);
+            + self.sine_at(dx.hypot(dy) * RADIAL_SCALE - t * 1.1);
 
         // Four waves give -4.0..=4.0; fold that onto the palette.
         let level = ((sum + 4.0) / 8.0 * 255.0).clamp(0.0, 255.0) as usize;

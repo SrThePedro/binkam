@@ -11,7 +11,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 use ratatui::{buffer::Buffer, layout::Rect};
 
 use super::Animation;
-use crate::render::{Rgb, lerp_rgb, put_pixel_pair, rgb};
+use crate::render::{Rgb, lerp_rgb, put_pixel_pair, rgb, wrap_by_one};
 
 /// Simulation steps per second, kept fixed so the flames look the same at
 /// any frame rate.
@@ -111,8 +111,11 @@ impl Fire {
             for x in 0..*width {
                 let drift = rng.random_range(-1..=1);
                 // Wrap sideways rather than clamp, so heat does not pile up
-                // against the left and right edges.
-                let source_x = (i32::from(x) + drift).rem_euclid(w) as usize;
+                // against the left and right edges. The drift is at most one
+                // column, so the two edge cases are all the wrapping needed
+                // and an integer division is not: `rem_euclid` here cost
+                // about a fifth of the whole animation when measured.
+                let source_x = wrap_by_one(i32::from(x) + drift, w);
                 let source = heat[usize::from(y) * stride + source_x];
                 let loss = rng.random_range(0..=*cooling);
                 heat[usize::from(y - 1) * stride + usize::from(x)] = source.saturating_sub(loss);

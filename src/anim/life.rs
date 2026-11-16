@@ -11,7 +11,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 use ratatui::{buffer::Buffer, layout::Rect};
 
 use super::Animation;
-use crate::render::{Rgb, lerp_rgb, put_pixel_pair_opt};
+use crate::render::{Rgb, lerp_rgb, put_pixel_pair_opt, wrap_by_one};
 
 /// Generations per second.
 const STEPS_PER_SEC: f32 = 9.0;
@@ -103,8 +103,12 @@ impl Life {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
-                let nx = (i32::from(x) + dx).rem_euclid(w) as usize;
-                let ny = (i32::from(y) + dy).rem_euclid(h) as usize;
+                // Neighbours are one step away at most, so the two edge
+                // cases are all the wrapping needed. `rem_euclid` would be
+                // two integer divisions per neighbour, eight neighbours per
+                // cell, for every cell of every generation.
+                let nx = wrap_by_one(i32::from(x) + dx, w);
+                let ny = wrap_by_one(i32::from(y) + dy, h);
                 count += u8::from(self.alive[ny * usize::from(self.width) + nx]);
             }
         }

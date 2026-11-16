@@ -45,7 +45,10 @@ fn main() -> color_eyre::Result<()> {
         return Ok(());
     }
 
-    // Headless path: never enters raw mode or the alternate screen.
+    // Headless paths: neither enters raw mode or the alternate screen.
+    if let Some(frames) = cli.bench {
+        return app::bench(&cli, &config, frames);
+    }
     if cli.dump_frame {
         return app::dump_frame(&cli, &config);
     }
