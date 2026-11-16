@@ -9,9 +9,9 @@ Her faz kendi başına çalışan bir sürümle biter. Bir faz bitmeden sonrakin
 Amaç: Boş ama sağlam bir döngü. Terminal asla bozuk kalmasın.
 
 - [x] `cargo init --name kumsaati`, edition 2024, `git init`
-- [ ] Bağımlılıklar: `ratatui`, `color-eyre`, `clap` (derive)
+- [x] Bağımlılıklar: `ratatui`, `color-eyre`, `clap` (derive)
 - [x] `main.rs`: `color_eyre::install()`, `ratatui::init()`, `App::run`, `ratatui::restore()`
-- [ ] `app.rs`: sabit FPS döngüsü (varsayılan 30), `event::poll(timeout)` ile olay bekleme
+- [x] `app.rs`: sabit FPS döngüsü (varsayılan 30), `event::poll(timeout)` ile olay bekleme
 - [x] Herhangi bir tuş → çıkış (yalnızca `KeyEventKind::Press`)
 - [x] Açılışta ~300 ms "grace period": bu sürede gelen olaylar yok sayılır
       (programı başlatan Enter tuşunun bırakılması vb.)
