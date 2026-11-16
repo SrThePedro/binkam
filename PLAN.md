@@ -12,11 +12,11 @@ Amaç: Boş ama sağlam bir döngü. Terminal asla bozuk kalmasın.
 - [ ] Bağımlılıklar: `ratatui`, `color-eyre`, `clap` (derive)
 - [x] `main.rs`: `color_eyre::install()`, `ratatui::init()`, `App::run`, `ratatui::restore()`
 - [ ] `app.rs`: sabit FPS döngüsü (varsayılan 30), `event::poll(timeout)` ile olay bekleme
-- [ ] Herhangi bir tuş → çıkış (yalnızca `KeyEventKind::Press`)
-- [ ] Açılışta ~300 ms "grace period": bu sürede gelen olaylar yok sayılır
+- [x] Herhangi bir tuş → çıkış (yalnızca `KeyEventKind::Press`)
+- [x] Açılışta ~300 ms "grace period": bu sürede gelen olaylar yok sayılır
       (programı başlatan Enter tuşunun bırakılması vb.)
-- [ ] `--dump-frame [--size WxH]`: `TestBackend` ile tek kare çiz, buffer'ı düz metin bas, çık
-- [ ] `Cargo.toml` release profili: `lto = true`, `codegen-units = 1`, `strip = true`
+- [x] `--dump-frame [--size WxH]`: `TestBackend` ile tek kare çiz, buffer'ı düz metin bas, çık
+- [x] `Cargo.toml` release profili: `lto = true`, `codegen-units = 1`, `strip = true`
 
 **Bitti:** Siyah ekran açılır, tuşa basınca kapanır; panic'te bile terminal düzgün döner;
 `--dump-frame` çalışır; clippy temiz.
