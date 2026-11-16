@@ -4,6 +4,7 @@ pub mod fire;
 pub mod life;
 pub mod matrix;
 pub mod plasma;
+pub mod rain;
 pub mod snow;
 pub mod starfield;
 
@@ -32,7 +33,15 @@ pub trait Animation {
 
 /// Every animation name, in the order they are offered to the user.
 pub const fn all_names() -> &'static [&'static str] {
-    &["fire", "life", "matrix", "plasma", "snow", "starfield"]
+    &[
+        "fire",
+        "life",
+        "matrix",
+        "plasma",
+        "rain",
+        "snow",
+        "starfield",
+    ]
 }
 
 /// Build the animation called `name`, seeded with `seed`.
@@ -46,6 +55,7 @@ pub fn by_name(name: &str, seed: u64) -> Option<Box<dyn Animation>> {
         "life" => Some(Box::new(life::Life::new(seed))),
         "matrix" => Some(Box::new(matrix::Matrix::new(seed))),
         "plasma" => Some(Box::new(plasma::Plasma::new(seed))),
+        "rain" => Some(Box::new(rain::Rain::new(seed))),
         "snow" => Some(Box::new(snow::Snow::new(seed))),
         "starfield" => Some(Box::new(starfield::Starfield::new(seed))),
         _ => None,

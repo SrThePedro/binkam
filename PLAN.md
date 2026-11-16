@@ -63,7 +63,7 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 - [x] `plasma` — sinüs tabanlı truecolor plazma
 - [x] `life` — Conway's Game of Life (half-block), durağanlaşınca yeniden tohumla
 - [x] `snow` — süzülen kar taneleri, yatay salınım
-- [ ] `rain` — eğik yağmur çizgileri, yere çarpma sıçramaları
+- [x] `rain` — eğik yağmur çizgileri, yere çarpma sıçramaları
 - [ ] `waves` — üst üste binen sinüs dalgaları (half-block)
 - [ ] `pipes` — kalıcı iz bırakarak büyüyen borular, ekran dolunca temizlenir
 
