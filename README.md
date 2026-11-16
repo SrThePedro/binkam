@@ -31,8 +31,39 @@ kumsaati --list-themes                    # list the themes
 kumsaati --print-config                   # print the settings this run would use
 ```
 
-Any key quits, except in `--preview`, where `n` and `p` change animation, `t`
-changes theme, `c` moves the clock and `q` or `Esc` quits.
+Any key press or mouse movement quits, except in `--preview`, where `n` and `p`
+change animation, `t` changes theme, `c` moves the clock and `q` or `Esc`
+quits.
+
+A frame of `starfield` on an 80 column terminal, as `--dump-frame` prints it:
+
+```
+                               +                     +                   +
+                                                                    +
+                                                                .
+                               +          .
+                                                        +
+                  .
+                   ██ ██  ██    ██████ ██████    ██████ ██████
+                   ██ ██  ██ ██ ██    .  * ██ ██   . ██     ██
+             .     ██ ██████    ██████ ██████    ██████     ██       .
+                   ██     ██ ██     ██ ██     ██ ██         ██
+                   ██     ██    ██████ ██████    ██████    .██      .
+                                                                +
+                          16 Kasım 2026, Pazartesi.               *
+
+.               .                               *            +
+       +                       .                         .  .       .
+                                            .                             +
+                                                     +        .
+```
+
+In colour and in motion it looks rather better. To record it:
+
+```bash
+cargo install --path .
+vhs demo.tape          # writes demo.gif; see https://github.com/charmbracelet/vhs
+```
 
 ### Animations
 
@@ -54,6 +85,21 @@ changes theme, `c` moves the clock and `q` or `Esc` quits.
 `gruvbox` re-colour everything: each pixel keeps the brightness the animation
 chose and takes its hue from the theme, so fire still rises and matrix still
 fades its trails, just in the theme's colours.
+
+### Colour
+
+Everything is drawn in truecolor and reduced once per frame, so no animation
+has to know what the terminal supports.
+
+| `--color` | What happens |
+| --- | --- |
+| `auto` (default) | Read `COLORTERM`, `TERM` and `NO_COLOR` and pick one of the below |
+| `truecolor` | 24 bit colour, exactly what was drawn |
+| `256` | Snapped to the 256 colour palette |
+| `none` | No colour at all; half-block pixels turn back into block characters, so fire and plasma keep their shapes |
+
+`--no-color` is shorthand for `--color none`, and `NO_COLOR=1` in the
+environment does the same.
 
 ### Clock positions
 
@@ -115,6 +161,43 @@ clock_backdrop = true
 # seed = 42
 ```
 
+## Performance
+
+Measured with `--bench`, which runs a given number of frames against an
+off-screen backend and reports what they cost. The time covers updating,
+drawing, theming, colour reduction and ratatui's own diffing; it does not
+cover writing to a real terminal.
+
+Release build, 200x50 (a large terminal), 30 fps, on one core:
+
+| Animation | Per frame | Share of a core |
+| --- | --- | --- |
+| `snow` | 102 µs | 0.30% |
+| `starfield` | 102 µs | 0.30% |
+| `rain` | 115 µs | 0.35% |
+| `pipes` | 126 µs | 0.38% |
+| `matrix` | 129 µs | 0.39% |
+| `life` | 174 µs | 0.52% |
+| `waves` | 176 µs | 0.53% |
+| `fire` | 292 µs | 0.87% |
+| `plasma` | 429 µs | 1.29% |
+
+At a more usual 80x24 the heaviest, `plasma`, costs 93 µs per frame, or 0.28%
+of a core.
+
+Two settings move the numbers: a theme other than `default` adds a pass over
+the buffer (`plasma` 1.29% to 1.43%), and `--color 256` adds another
+(1.29% to 1.59%).
+
+To produce the table on another machine:
+
+```bash
+cargo build --release
+for a in $(./target/release/kumsaati --list); do
+  ./target/release/kumsaati --bench 4000 --size 200x50 --anim "$a" --seed 1
+done
+```
+
 ## Development
 
 ```bash
@@ -123,10 +206,16 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 cargo run -- --dump-frame                      # one frame as plain text
 cargo run -- --dump-frame --anim matrix --size 80x24
+cargo run --release -- --bench 4000            # what a frame costs
 ```
 
 `--dump-frame` draws a single frame to an off-screen backend and prints it, so
-nothing touches the real terminal.
+nothing touches the real terminal. `--bench` does the same and times it.
+
+`clippy` is clean at the default level and that is what the build expects.
+`clippy::pedantic` is not clean on purpose: most of what is left is numeric
+cast warnings in drawing code, where the value is already clamped and a
+float-to-integer `as` cast saturates rather than wrapping.
 
 ## License
 

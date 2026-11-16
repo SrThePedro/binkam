@@ -110,12 +110,12 @@ Amaç: Her terminalde düzgün, hafif.
 
 - [x] Renk desteği tespiti: `COLORTERM` yoksa 256 renge düş; `--no-color` modu
 - [x] Fare hareketi/tıklama ile çıkış (mouse capture aç, çıkışta mutlaka kapat)
-- [ ] CPU ölçümü (release, 30 FPS, 200x50): her animasyon için not et; ağır olanı optimize et
+- [x] CPU ölçümü (release, 30 FPS, 200x50): her animasyon için not et; ağır olanı optimize et
       (render'da allocation yok, gereksiz `Color::Rgb` hesapları önbellekte)
 - [x] Çok küçük / çok büyük terminal, hızlı yeniden boyutlandırma testleri
 - [ ] Windows Terminal + PowerShell'de elle test (kullanıcı)
 - [x] `clippy::pedantic` uyarılarını gözden geçir (hepsini değil, anlamlı olanları düzelt)
-- [ ] README: kurulum, kullanım, ekran görüntüsü/GIF (ör. `vhs` ile)
+- [x] README: kurulum, kullanım, ekran görüntüsü/GIF (ör. `vhs` ile)
 
 **Bitti:** İki işletim sisteminde test edildi, CPU tablosu README'de.
 
