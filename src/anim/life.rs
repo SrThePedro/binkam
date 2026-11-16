@@ -11,7 +11,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 use ratatui::{buffer::Buffer, layout::Rect};
 
 use super::Animation;
-use crate::render::{Rgb, lerp_rgb, put_pixel_pair, rgb};
+use crate::render::{Rgb, lerp_rgb, put_pixel_pair_opt};
 
 /// Generations per second.
 const STEPS_PER_SEC: f32 = 9.0;
@@ -35,9 +35,6 @@ const ALIVE_COLOR: Rgb = (190, 255, 240);
 const TRAIL_HOT: Rgb = (36, 150, 185);
 /// Colour the trail fades out to.
 const TRAIL_COLD: Rgb = (6, 16, 38);
-/// Stand-in for a pixel with nothing in it, used when only its partner in
-/// the half-block pair is lit.
-const DARK: Rgb = (0, 0, 0);
 
 /// The Game of Life animation.
 #[derive(Debug)]
@@ -215,17 +212,12 @@ impl Animation for Life {
         let rows = self.pixel_height / 2;
         for y in 0..rows.min(area.height) {
             for x in 0..self.width.min(area.width) {
-                let top = self.color_of(self.index(x, y * 2));
-                let bottom = self.color_of(self.index(x, y * 2 + 1));
-                if top.is_none() && bottom.is_none() {
-                    continue; // both pixels dark: leave the background be
-                }
-                put_pixel_pair(
+                put_pixel_pair_opt(
                     buf,
                     area.x + x,
                     area.y + y,
-                    rgb(top.unwrap_or(DARK)),
-                    rgb(bottom.unwrap_or(DARK)),
+                    self.color_of(self.index(x, y * 2)),
+                    self.color_of(self.index(x, y * 2 + 1)),
                 );
             }
         }

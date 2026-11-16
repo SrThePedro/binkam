@@ -7,6 +7,7 @@ pub mod plasma;
 pub mod rain;
 pub mod snow;
 pub mod starfield;
+pub mod waves;
 
 use std::time::Duration;
 
@@ -41,6 +42,7 @@ pub const fn all_names() -> &'static [&'static str] {
         "rain",
         "snow",
         "starfield",
+        "waves",
     ]
 }
 
@@ -58,6 +60,7 @@ pub fn by_name(name: &str, seed: u64) -> Option<Box<dyn Animation>> {
         "rain" => Some(Box::new(rain::Rain::new(seed))),
         "snow" => Some(Box::new(snow::Snow::new(seed))),
         "starfield" => Some(Box::new(starfield::Starfield::new(seed))),
+        "waves" => Some(Box::new(waves::Waves::new(seed))),
         _ => None,
     }
 }

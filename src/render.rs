@@ -57,6 +57,24 @@ pub fn put_pixel_pair(buf: &mut Buffer, x: u16, y: u16, top: Color, bottom: Colo
     }
 }
 
+/// Draw a half-block cell where either pixel may be empty.
+///
+/// Does nothing when both are empty, so whatever is behind keeps showing
+/// through instead of being painted over in black.
+pub fn put_pixel_pair_opt(buf: &mut Buffer, x: u16, y: u16, top: Option<Rgb>, bottom: Option<Rgb>) {
+    if top.is_none() && bottom.is_none() {
+        return;
+    }
+    const DARK: Rgb = (0, 0, 0);
+    put_pixel_pair(
+        buf,
+        x,
+        y,
+        rgb(top.unwrap_or(DARK)),
+        rgb(bottom.unwrap_or(DARK)),
+    );
+}
+
 /// Fade everything already drawn inside `rect` towards black.
 ///
 /// `keep` is the fraction of brightness that survives, so `0.25` leaves a
@@ -128,6 +146,21 @@ mod tests {
         assert_eq!(buf[(0, 0)].symbol(), "▀");
         assert_eq!(buf[(0, 0)].fg, Color::Rgb(1, 2, 3));
         assert_eq!(buf[(0, 0)].bg, Color::Rgb(4, 5, 6));
+    }
+
+    #[test]
+    fn optional_pixel_pair_skips_fully_empty_cells() {
+        let area = Rect::new(0, 0, 3, 1);
+        let mut buf = Buffer::empty(area);
+        put_pixel_pair_opt(&mut buf, 0, 0, None, None);
+        put_pixel_pair_opt(&mut buf, 1, 0, Some((10, 20, 30)), None);
+        put_pixel_pair_opt(&mut buf, 2, 0, None, Some((40, 50, 60)));
+
+        assert_eq!(buf[(0, 0)].symbol(), " ", "an empty pair draws nothing");
+        assert_eq!(buf[(1, 0)].fg, Color::Rgb(10, 20, 30));
+        assert_eq!(buf[(1, 0)].bg, Color::Rgb(0, 0, 0));
+        assert_eq!(buf[(2, 0)].fg, Color::Rgb(0, 0, 0));
+        assert_eq!(buf[(2, 0)].bg, Color::Rgb(40, 50, 60));
     }
 
     #[test]
