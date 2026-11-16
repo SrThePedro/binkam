@@ -12,6 +12,7 @@ use ratatui::{
     widgets::Widget,
 };
 
+use crate::render::text_cols;
 use font::{GLYPH_GAP, GLYPH_HEIGHT};
 
 /// Turkish month names, indexed by [`Datelike::month0`].
@@ -34,8 +35,37 @@ const WEEKDAYS: [&str; 7] = [
 /// Blank rows between the clock and the date line.
 const DATE_GAP: u16 = 1;
 
+/// Columns taken by the `HH:MM` fallback.
+const SHORT_LEN: u16 = 5;
+
 /// Rows taken by clock, gap and date line together.
 const FULL_HEIGHT: u16 = GLYPH_HEIGHT + DATE_GAP + 1;
+
+/// Where the clock ends up inside a given area, decided once and then used
+/// both for drawing and for darkening the background behind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placement {
+    /// Block font at `clock`, with the date line at `date` when it fits.
+    Big { clock: Rect, date: Option<Rect> },
+    /// Plain text fallback; `seconds` is false once only `HH:MM` fits.
+    Small { rect: Rect, seconds: bool },
+    /// Not even `HH:MM` fits.
+    Hidden,
+}
+
+impl Placement {
+    /// The smallest rectangle covering everything this placement draws.
+    fn bounds(self) -> Option<Rect> {
+        match self {
+            Self::Big { clock, date } => Some(match date {
+                Some(date) => clock.union(date),
+                None => clock,
+            }),
+            Self::Small { rect, .. } => Some(rect),
+            Self::Hidden => None,
+        }
+    }
+}
 
 /// The colon is lit during the first half of every second.
 const BLINK_HALF_NANOS: u32 = 500_000_000;
@@ -163,63 +193,96 @@ impl ClockWidget {
         }
     }
 
-    /// Fallback for terminals too small for the block font.
-    fn render_small(&self, area: Rect, buf: &mut Buffer) {
-        let full = self.time_text.as_str();
-        // `time_text` is ASCII, so slicing by bytes is slicing by columns.
-        let text = if area.width >= text_cols(full) {
-            full
-        } else {
-            full.get(..5).unwrap_or(full) // HH:MM
-        };
-
-        let width = text_cols(text);
-        if width == 0 || area.width < width {
-            return; // not even HH:MM fits; better blank than garbled
-        }
-
-        let x = area.x + (area.width - width) / 2;
-        let y = area.y + (area.height - 1) / 2;
-        buf.set_string(x, y, text, Style::new().fg(self.digit_color));
-    }
-}
-
-impl Widget for &ClockWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    /// Work out where the clock goes, without drawing anything.
+    fn placement(&self, area: Rect) -> Placement {
         if area.is_empty() {
-            return;
+            return Placement::Hidden;
         }
 
         let clock_width = font::text_width(&self.time_text);
         let date_width = text_cols(&self.date_text);
 
-        if area.width < clock_width || area.height < GLYPH_HEIGHT {
-            self.render_small(area, buf);
-            return;
+        if clock_width > 0 && area.width >= clock_width && area.height >= GLYPH_HEIGHT {
+            let with_date =
+                date_width > 0 && area.height >= FULL_HEIGHT && area.width >= date_width;
+            let height = if with_date { FULL_HEIGHT } else { GLYPH_HEIGHT };
+            let top = area.y + (area.height - height) / 2;
+
+            return Placement::Big {
+                clock: Rect::new(
+                    area.x + (area.width - clock_width) / 2,
+                    top,
+                    clock_width,
+                    GLYPH_HEIGHT,
+                ),
+                date: with_date.then(|| {
+                    Rect::new(
+                        area.x + (area.width - date_width) / 2,
+                        top + GLYPH_HEIGHT + DATE_GAP,
+                        date_width,
+                        1,
+                    )
+                }),
+            };
         }
 
-        let with_date = area.height >= FULL_HEIGHT && area.width >= date_width;
-        let height = if with_date { FULL_HEIGHT } else { GLYPH_HEIGHT };
-
-        let top = area.y + (area.height - height) / 2;
-        let left = area.x + (area.width - clock_width) / 2;
-        self.render_big(left, top, area, buf);
-
-        if with_date {
-            let x = area.x + (area.width - date_width) / 2;
-            buf.set_string(
-                x,
-                top + GLYPH_HEIGHT + DATE_GAP,
-                &self.date_text,
-                Style::new().fg(self.date_color),
-            );
+        // Too small for the block font: drop the seconds, then give up.
+        let full_width = text_cols(&self.time_text);
+        let (width, seconds) = if area.width >= full_width {
+            (full_width, true)
+        } else {
+            (SHORT_LEN, false)
+        };
+        if width == 0 || area.width < width {
+            return Placement::Hidden;
         }
+
+        Placement::Small {
+            rect: Rect::new(
+                area.x + (area.width - width) / 2,
+                area.y + (area.height - 1) / 2,
+                width,
+                1,
+            ),
+            seconds,
+        }
+    }
+
+    /// The area the clock would cover inside `area`, or `None` when it hides.
+    ///
+    /// The app uses this to darken just enough of the animation behind it.
+    pub fn occupied_area(&self, area: Rect) -> Option<Rect> {
+        self.placement(area).bounds()
     }
 }
 
-/// Column count of `text`. Turkish letters are multi-byte but one column wide.
-fn text_cols(text: &str) -> u16 {
-    u16::try_from(text.chars().count()).unwrap_or(u16::MAX)
+impl Widget for &ClockWidget {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        match self.placement(area) {
+            Placement::Big { clock, date } => {
+                self.render_big(clock.x, clock.y, area, buf);
+                if let Some(date) = date {
+                    buf.set_string(
+                        date.x,
+                        date.y,
+                        &self.date_text,
+                        Style::new().fg(self.date_color),
+                    );
+                }
+            }
+            Placement::Small { rect, seconds } => {
+                let full = self.time_text.as_str();
+                // `time_text` is ASCII, so byte slicing is column slicing.
+                let text = if seconds {
+                    full
+                } else {
+                    full.get(..usize::from(SHORT_LEN)).unwrap_or(full)
+                };
+                buf.set_string(rect.x, rect.y, text, Style::new().fg(self.digit_color));
+            }
+            Placement::Hidden => {}
+        }
+    }
 }
 
 #[cfg(test)]

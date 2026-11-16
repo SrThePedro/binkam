@@ -19,7 +19,34 @@ pub struct Cli {
     /// Terminal size used by `--dump-frame`, given as WIDTHxHEIGHT (e.g. 80x24).
     #[arg(long, value_parser = parse_size)]
     pub size: Option<(u16, u16)>,
+
+    /// Background animation to run.
+    #[arg(
+        long,
+        default_value = DEFAULT_ANIM,
+        value_parser = clap::builder::PossibleValuesParser::new(crate::anim::all_names()),
+    )]
+    pub anim: String,
+
+    /// List the available animations and exit.
+    #[arg(long)]
+    pub list: bool,
+
+    /// Seed the animation's randomness, for a reproducible picture.
+    #[arg(long)]
+    pub seed: Option<u64>,
+
+    /// Show a frames-per-second counter in the top right corner.
+    #[arg(long)]
+    pub show_fps: bool,
+
+    /// Do not darken the animation behind the clock.
+    #[arg(long)]
+    pub no_backdrop: bool,
 }
+
+/// Animation used when `--anim` is not given.
+const DEFAULT_ANIM: &str = "starfield";
 
 impl Cli {
     /// Size to use for a headless frame dump, falling back to a sane default.
@@ -30,6 +57,15 @@ impl Cli {
     /// Duration of a single frame derived from [`Cli::fps`].
     pub fn frame_time(&self) -> std::time::Duration {
         std::time::Duration::from_secs_f64(1.0 / f64::from(self.fps))
+    }
+
+    /// The seed to hand animations: the one given, or a fresh one per run.
+    pub fn resolved_seed(&self) -> u64 {
+        self.seed.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0x5EED_5EED, |since| since.as_nanos() as u64)
+        })
     }
 }
 
@@ -82,6 +118,25 @@ mod tests {
     fn dump_size_defaults_to_80x24() {
         let cli = Cli::parse_from(["kumsaati"]);
         assert_eq!(cli.dump_size(), (80, 24));
+    }
+
+    #[test]
+    fn defaults_to_a_known_animation() {
+        let cli = Cli::parse_from(["kumsaati"]);
+        assert_eq!(cli.anim, DEFAULT_ANIM);
+        assert!(crate::anim::all_names().contains(&DEFAULT_ANIM));
+    }
+
+    #[test]
+    fn rejects_unknown_animations() {
+        assert!(Cli::try_parse_from(["kumsaati", "--anim", "nope"]).is_err());
+    }
+
+    #[test]
+    fn an_explicit_seed_is_stable_across_calls() {
+        let cli = Cli::parse_from(["kumsaati", "--seed", "7"]);
+        assert_eq!(cli.resolved_seed(), 7);
+        assert_eq!(cli.resolved_seed(), 7);
     }
 
     #[test]

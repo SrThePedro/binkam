@@ -41,15 +41,15 @@ Amaç: Ortada okunaklı, büyük bir dijital saat.
 ## Faz 2 — Animasyon çatısı + ilk animasyon
 Amaç: Genişletilebilir yapı ve saatin arkasında hareket.
 
-- [ ] `anim/mod.rs`: `Animation` trait'i (bkz. CLAUDE.md), `by_name`, `all_names`
-- [ ] `render.rs`: half-block piksel yardımcısı (`▀` ile hücre başına 2 dikey piksel),
+- [x] `anim/mod.rs`: `Animation` trait'i (bkz. CLAUDE.md), `by_name`, `all_names`
+- [x] `render.rs`: half-block piksel yardımcısı (`▀` ile hücre başına 2 dikey piksel),
       renk lerp fonksiyonu
-- [ ] `starfield.rs`: merkezden dışa akan 3D yıldız alanı, uzaklığa göre parlaklık
-- [ ] App: önce animasyon, üstüne saat çizilir; saat arkasında hafif koyu bir "kutu"
+- [x] `starfield.rs`: merkezden dışa akan 3D yıldız alanı, uzaklığa göre parlaklık
+- [x] App: önce animasyon, üstüne saat çizilir; saat arkasında hafif koyu bir "kutu"
       (okunabilirlik için, ayarla kapatılabilir)
-- [ ] `--anim <isim>` CLI argümanı, `--list` ile isimleri listele
-- [ ] `--fps` göstergesi (debug için sağ üst köşe)
-- [ ] Test: sabit seed + sabit `dt` ile `update` deterministik
+- [x] `--anim <isim>` CLI argümanı, `--list` ile isimleri listele
+- [x] `--fps` göstergesi (debug için sağ üst köşe)
+- [x] Test: sabit seed + sabit `dt` ile `update` deterministik
 
 **Bitti:** Yıldız alanı akıcı, saat üstte okunaklı, CPU makul.
 
