@@ -61,9 +61,11 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 - [x] `matrix` — yeşil karakter yağmuru, kuyruk solması
 - [x] `fire` — DOOM tarzı ateş (half-block, ısı paleti)
 - [x] `plasma` — sinüs tabanlı truecolor plazma
-- [ ] `bounce` — saatin kendisi DVD logosu gibi kenarlardan seker, her çarpışmada renk değişir
 - [x] `life` — Conway's Game of Life (half-block), durağanlaşınca yeniden tohumla
-- [ ] (opsiyonel) `pipes`, `rain`, `snow`, `waves`
+- [x] `snow` — süzülen kar taneleri, yatay salınım
+- [ ] `rain` — eğik yağmur çizgileri, yere çarpma sıçramaları
+- [ ] `waves` — üst üste binen sinüs dalgaları (half-block)
+- [ ] `pipes` — kalıcı iz bırakarak büyüyen borular, ekran dolunca temizlenir
 
 **Bitti:** `--list` en az 5 animasyon gösteriyor, hepsi `--dump-frame` ile hatasız çiziliyor.
 
@@ -73,6 +75,8 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 Amaç: "Ekran koruyucu" hissi.
 
 - [ ] Saat konum modları: `center`, `bounce`, `corner`, `drift` (yavaş kayma — burn-in önleme)
+      (`bounce` Faz 3'ten taşındı: saatin kendisi DVD logosu gibi sekip her çarpışmada
+      renk değiştirir — bu bir arka plan animasyonu değil, saat konum modu)
 - [ ] Otomatik döngü: her N dakikada bir sonraki/rastgele animasyon
 - [ ] Geçiş efekti: eski ve yeni animasyon arasında kısa karartma (fade to black → fade in)
 - [ ] Renk temaları: `default`, `nord`, `gruvbox`, `amber`, `mono` — saat ve animasyonlar
