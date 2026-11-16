@@ -41,6 +41,42 @@ pub fn lerp(a: Rgb, b: Rgb, t: f32) -> Color {
     Color::Rgb(r, g, b)
 }
 
+/// Perceived brightness of a colour, from 0 to 255.
+///
+/// Green counts for more than red and red for more than blue, roughly the
+/// way an eye weighs them.
+pub fn luma(color: Rgb) -> u8 {
+    let weighted = u32::from(color.0) * 2 + u32::from(color.1) * 3 + u32::from(color.2);
+    (weighted / 6) as u8
+}
+
+/// Interpolate colour stops into a 256 entry ramp, stops evenly spaced.
+///
+/// One stop gives a flat ramp; no stops gives black.
+pub fn ramp(stops: &[Rgb]) -> [Rgb; 256] {
+    let mut out = [(0, 0, 0); 256];
+    match stops {
+        [] => return out,
+        [only] => {
+            out.fill(*only);
+            return out;
+        }
+        _ => {}
+    }
+
+    let segments = stops.len() - 1;
+    for (level, slot) in out.iter_mut().enumerate() {
+        let position = level as f32 / 255.0 * segments as f32;
+        let segment = (position as usize).min(segments - 1);
+        *slot = lerp_rgb(
+            stops[segment],
+            stops[segment + 1],
+            position - segment as f32,
+        );
+    }
+    out
+}
+
 /// Scale an RGB triple towards black. `factor` above 1.0 brightens.
 pub fn scale_rgb(color: Rgb, factor: f32) -> Rgb {
     let mul = |c: u8| (f32::from(c) * factor).round().clamp(0.0, 255.0) as u8;
@@ -129,6 +165,41 @@ mod tests {
         assert_eq!(lerp_rgb(a, b, -5.0), a);
         assert_eq!(lerp_rgb(a, b, 5.0), b);
         assert!(lerp_rgb(a, b, f32::NAN).0 <= 100);
+    }
+
+    #[test]
+    fn luma_ranks_colours_by_brightness() {
+        assert_eq!(luma((0, 0, 0)), 0);
+        assert_eq!(luma((255, 255, 255)), 255);
+        // Green reads brighter than red, red brighter than blue.
+        assert!(luma((0, 255, 0)) > luma((255, 0, 0)));
+        assert!(luma((255, 0, 0)) > luma((0, 0, 255)));
+    }
+
+    #[test]
+    fn ramp_spans_its_stops() {
+        let stops = [(0, 0, 0), (128, 64, 32), (255, 255, 255)];
+        let table = ramp(&stops);
+        assert_eq!(table[0], stops[0]);
+        assert_eq!(table[255], stops[2]);
+        // The middle stop lands mid-ramp, give or take one rounding step.
+        let mid = table[128];
+        assert!(
+            mid.0.abs_diff(stops[1].0) <= 2
+                && mid.1.abs_diff(stops[1].1) <= 2
+                && mid.2.abs_diff(stops[1].2) <= 2,
+            "{mid:?} is not near {:?}",
+            stops[1]
+        );
+    }
+
+    #[test]
+    fn ramp_handles_degenerate_stop_lists() {
+        assert_eq!(ramp(&[]), [(0, 0, 0); 256]);
+        assert_eq!(ramp(&[(9, 8, 7)]), [(9, 8, 7); 256]);
+        let two = ramp(&[(0, 0, 0), (255, 255, 255)]);
+        assert_eq!(two[0], (0, 0, 0));
+        assert_eq!(two[255], (255, 255, 255));
     }
 
     #[test]

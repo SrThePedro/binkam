@@ -32,6 +32,10 @@ pub struct Cli {
     #[arg(long)]
     pub list: bool,
 
+    /// List the available colour themes and exit.
+    #[arg(long)]
+    pub list_themes: bool,
+
     /// Seed the animation's randomness, for a reproducible picture.
     #[arg(long)]
     pub seed: Option<u64>,
@@ -43,6 +47,14 @@ pub struct Cli {
     /// Do not darken the animation behind the clock.
     #[arg(long)]
     pub no_backdrop: bool,
+
+    /// Colour theme for the clock and the animations.
+    #[arg(
+        long,
+        default_value = crate::theme::DEFAULT,
+        value_parser = clap::builder::PossibleValuesParser::new(crate::theme::Theme::all_names()),
+    )]
+    pub theme: String,
 }
 
 /// Animation used when `--anim` is not given.
@@ -125,6 +137,18 @@ mod tests {
         let cli = Cli::parse_from(["kumsaati"]);
         assert_eq!(cli.anim, DEFAULT_ANIM);
         assert!(crate::anim::all_names().contains(&DEFAULT_ANIM));
+    }
+
+    #[test]
+    fn defaults_to_a_known_theme() {
+        let cli = Cli::parse_from(["kumsaati"]);
+        assert_eq!(cli.theme, crate::theme::DEFAULT);
+        assert!(crate::theme::Theme::by_name(&cli.theme).is_some());
+    }
+
+    #[test]
+    fn rejects_unknown_themes() {
+        assert!(Cli::try_parse_from(["kumsaati", "--theme", "nope"]).is_err());
     }
 
     #[test]

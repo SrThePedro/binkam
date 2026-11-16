@@ -17,7 +17,7 @@ use ratatui::{
     widgets::{Block, Widget as _},
 };
 
-use crate::{anim::Animation, cli::Cli, clock::ClockWidget, render};
+use crate::{anim::Animation, cli::Cli, clock::ClockWidget, render, theme::Theme};
 
 /// Events arriving within this window after startup are ignored.
 ///
@@ -56,6 +56,8 @@ pub struct App {
     /// Last area the animation was told about, so resizes are only forwarded
     /// when the terminal really changed.
     area: Rect,
+    /// Colours for the clock and for whatever the animation draws.
+    theme: Theme,
     /// Whether to darken the animation behind the clock.
     backdrop: bool,
     /// Whether to draw the frames-per-second counter.
@@ -71,14 +73,21 @@ impl App {
     pub fn new(cli: &Cli) -> color_eyre::Result<Self> {
         let animation = crate::anim::by_name(&cli.anim, cli.resolved_seed())
             .ok_or_else(|| eyre!("unknown animation `{}`; try --list", cli.anim))?;
+        let theme = Theme::by_name(&cli.theme)
+            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
+
+        let mut clock = ClockWidget::new();
+        clock.digit_color = theme.clock_color();
+        clock.date_color = theme.date_color();
 
         Ok(Self {
             running: true,
             frame_time: cli.frame_time(),
             uptime: Duration::ZERO,
-            clock: ClockWidget::new(),
+            clock,
             animation,
             area: Rect::ZERO,
+            theme,
             backdrop: !cli.no_backdrop,
             show_fps: cli.show_fps,
             fps: 0.0,
@@ -143,13 +152,14 @@ impl App {
             self.fps + (sample - self.fps) * FPS_SMOOTHING
         };
 
-        // The animation name rides along; it is the other thing worth seeing
-        // while debugging a frame rate problem.
+        // The animation and theme ride along; they are the other things worth
+        // seeing while debugging a frame rate problem.
         self.fps_text.clear();
         let _ = write!(
             self.fps_text,
-            "{} · {:.0} fps",
+            "{} · {} · {:.0} fps",
             self.animation.name(),
+            self.theme.name(),
             self.fps
         );
     }
@@ -161,6 +171,10 @@ impl App {
 
         let buf = frame.buffer_mut();
         self.animation.render(area, buf);
+
+        // Re-colour the animation before anything is dimmed: the theme maps
+        // colours by brightness, so running it after a fade would undo it.
+        self.theme.apply(buf, area);
 
         // Dim the animation just behind the clock so the digits stay legible.
         if self.backdrop

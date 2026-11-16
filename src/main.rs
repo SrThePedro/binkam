@@ -5,6 +5,7 @@ mod app;
 mod cli;
 mod clock;
 mod render;
+mod theme;
 
 use clap::Parser;
 
@@ -16,6 +17,13 @@ fn main() -> color_eyre::Result<()> {
 
     if cli.list {
         for name in anim::all_names() {
+            println!("{name}");
+        }
+        return Ok(());
+    }
+
+    if cli.list_themes {
+        for name in theme::Theme::all_names() {
             println!("{name}");
         }
         return Ok(());

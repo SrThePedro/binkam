@@ -9,7 +9,7 @@ use std::{f32::consts::TAU, time::Duration};
 use ratatui::{buffer::Buffer, layout::Rect};
 
 use super::Animation;
-use crate::render::{Rgb, lerp_rgb, put_pixel_pair, rgb};
+use crate::render::{Rgb, put_pixel_pair, ramp, rgb};
 
 /// Entries in the sine lookup table. A power of two, so wrapping an index is
 /// a bit mask rather than a division.
@@ -64,7 +64,7 @@ impl Plasma {
 
         Self {
             sine,
-            palette: build_palette(),
+            palette: ramp(&STOPS),
             // Different seeds start the pattern at a different phase.
             time: (seed % 1000) as f32 * TIME_PERIOD / 1000.0,
         }
@@ -134,23 +134,6 @@ impl Animation for Plasma {
     }
 }
 
-/// Interpolate [`STOPS`] into a 256 entry ramp that wraps around.
-fn build_palette() -> [Rgb; 256] {
-    let mut palette = [(0, 0, 0); 256];
-    let segments = STOPS.len() - 1;
-
-    for (level, slot) in palette.iter_mut().enumerate() {
-        let position = level as f32 / 255.0 * segments as f32;
-        let segment = (position as usize).min(segments - 1);
-        *slot = lerp_rgb(
-            STOPS[segment],
-            STOPS[segment + 1],
-            position - segment as f32,
-        );
-    }
-    palette
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,7 +171,7 @@ mod tests {
 
     #[test]
     fn palette_is_cyclic() {
-        let palette = build_palette();
+        let palette = ramp(&STOPS);
         assert_eq!(palette[0], STOPS[0]);
         assert_eq!(palette[255], *STOPS.last().unwrap());
         assert_eq!(palette[0], palette[255], "the ramp has to close the loop");

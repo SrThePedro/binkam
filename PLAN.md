@@ -79,7 +79,7 @@ Amaç: "Ekran koruyucu" hissi.
       renk değiştirir — bu bir arka plan animasyonu değil, saat konum modu)
 - [ ] Otomatik döngü: her N dakikada bir sonraki/rastgele animasyon
 - [ ] Geçiş efekti: eski ve yeni animasyon arasında kısa karartma (fade to black → fade in)
-- [ ] Renk temaları: `default`, `nord`, `gruvbox`, `amber`, `mono` — saat ve animasyonlar
+- [x] Renk temaları: `default`, `nord`, `gruvbox`, `amber`, `mono` — saat ve animasyonlar
       temadan renk alır
 - [ ] Önizleme modu (`--preview`): tuşlar çıkmaz; `n`/`p` sonraki/önceki animasyon,
       `t` tema, `q`/`Esc` çıkış
