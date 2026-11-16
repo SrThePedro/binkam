@@ -62,7 +62,7 @@ Amaç: Çeşitlilik. Her animasyon ayrı commit, `add-animation` skill'i ile.
 - [x] `fire` — DOOM tarzı ateş (half-block, ısı paleti)
 - [x] `plasma` — sinüs tabanlı truecolor plazma
 - [ ] `bounce` — saatin kendisi DVD logosu gibi kenarlardan seker, her çarpışmada renk değişir
-- [ ] `life` — Conway's Game of Life (half-block), durağanlaşınca yeniden tohumla
+- [x] `life` — Conway's Game of Life (half-block), durağanlaşınca yeniden tohumla
 - [ ] (opsiyonel) `pipes`, `rain`, `snow`, `waves`
 
 **Bitti:** `--list` en az 5 animasyon gösteriyor, hepsi `--dump-frame` ile hatasız çiziliyor.
