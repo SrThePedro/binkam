@@ -98,10 +98,12 @@ pub fn put_pixel_pair(buf: &mut Buffer, x: u16, y: u16, top: Color, bottom: Colo
 /// Does nothing when both are empty, so whatever is behind keeps showing
 /// through instead of being painted over in black.
 pub fn put_pixel_pair_opt(buf: &mut Buffer, x: u16, y: u16, top: Option<Rgb>, bottom: Option<Rgb>) {
+    /// Stand-in for a pixel with nothing in it.
+    const DARK: Rgb = (0, 0, 0);
+
     if top.is_none() && bottom.is_none() {
         return;
     }
-    const DARK: Rgb = (0, 0, 0);
     put_pixel_pair(
         buf,
         x,

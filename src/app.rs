@@ -112,8 +112,8 @@ pub struct App {
     preview: bool,
     /// Whether to draw the status and frames-per-second readout.
     show_fps: bool,
-    /// Smoothed frames per second.
-    fps: f32,
+    /// Smoothed frames per second, once there has been a frame to measure.
+    fps: Option<f32>,
     /// Pre-rendered counter text, so drawing never formats or allocates.
     fps_text: String,
 }
@@ -185,8 +185,8 @@ impl App {
             backdrop: config.clock_backdrop,
             // Preview mode needs the readout to say what is on screen.
             show_fps: cli.show_fps || cli.preview,
-            fps: 0.0,
-            fps_text: String::with_capacity(8),
+            fps: None,
+            fps_text: String::with_capacity(32),
         })
     }
 
@@ -328,11 +328,12 @@ impl App {
             return;
         }
         let sample = 1.0 / dt.as_secs_f32();
-        self.fps = if self.fps == 0.0 {
-            sample
-        } else {
-            self.fps + (sample - self.fps) * FPS_SMOOTHING
+        // The first frame has nothing to smooth against, so it is the estimate.
+        let smoothed = match self.fps {
+            Some(previous) => previous + (sample - previous) * FPS_SMOOTHING,
+            None => sample,
         };
+        self.fps = Some(smoothed);
 
         // The animation, theme and clock position ride along; they are the
         // other things worth seeing while debugging a frame rate problem.
@@ -343,7 +344,7 @@ impl App {
             self.animation.name(),
             self.theme.name(),
             self.motion.position().name(),
-            self.fps
+            smoothed
         );
     }
 

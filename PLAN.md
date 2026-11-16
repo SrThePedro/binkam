@@ -114,7 +114,7 @@ Amaç: Her terminalde düzgün, hafif.
       (render'da allocation yok, gereksiz `Color::Rgb` hesapları önbellekte)
 - [x] Çok küçük / çok büyük terminal, hızlı yeniden boyutlandırma testleri
 - [ ] Windows Terminal + PowerShell'de elle test (kullanıcı)
-- [ ] `clippy::pedantic` uyarılarını gözden geçir (hepsini değil, anlamlı olanları düzelt)
+- [x] `clippy::pedantic` uyarılarını gözden geçir (hepsini değil, anlamlı olanları düzelt)
 - [ ] README: kurulum, kullanım, ekran görüntüsü/GIF (ör. `vhs` ile)
 
 **Bitti:** İki işletim sisteminde test edildi, CPU tablosu README'de.

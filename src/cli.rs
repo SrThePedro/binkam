@@ -67,7 +67,7 @@ pub struct Cli {
 
     /// How much colour to use.
     ///
-    /// `auto` works it out from COLORTERM, TERM and NO_COLOR.
+    /// `auto` works it out from `COLORTERM`, `TERM` and `NO_COLOR`.
     #[arg(
         long,
         value_name = "MODE",
@@ -116,7 +116,7 @@ pub struct Cli {
     #[arg(long)]
     pub dump_frame: bool,
 
-    /// Terminal size used by `--dump-frame`, given as WIDTHxHEIGHT (e.g. 80x24).
+    /// Terminal size used by `--dump-frame`, given as `WIDTHxHEIGHT` (e.g. 80x24).
     #[arg(long, value_parser = parse_size)]
     pub size: Option<(u16, u16)>,
 }

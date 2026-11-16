@@ -149,22 +149,20 @@ impl ClockMotion {
     fn settle(&mut self) {
         let (span_x, span_y) = self.span();
         match self.position {
-            ClockPosition::Center | ClockPosition::Drift => {
-                self.x = span_x / 2.0;
-                self.y = span_y / 2.0;
-            }
             ClockPosition::Corner => {
                 self.x = (span_x - CORNER_MARGIN_X).max(0.0);
                 self.y = (span_y - CORNER_MARGIN_Y).max(0.0);
             }
             // Bounce carries on from wherever it was, just inside the new
-            // edges. With nowhere to carry over from, it starts in the middle
-            // rather than wedged in a corner.
+            // edges.
             ClockPosition::Bounce if self.placed => {
                 self.x = self.x.clamp(0.0, span_x);
                 self.y = self.y.clamp(0.0, span_y);
             }
-            ClockPosition::Bounce => {
+            // Center and drift both start from the middle, and so does a
+            // bounce with nowhere to carry over from: better there than
+            // wedged in a corner.
+            _ => {
                 self.x = span_x / 2.0;
                 self.y = span_y / 2.0;
             }

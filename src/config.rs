@@ -124,16 +124,16 @@ impl Config {
             base.fps = fps;
         }
         if !cli.anim.is_empty() {
-            base.anim = cli.anim.clone();
+            base.anim.clone_from(&cli.anim);
         }
         if let Some(minutes) = cli.cycle_minutes {
             base.cycle_minutes = minutes;
         }
         if let Some(theme) = &cli.theme {
-            base.theme = theme.clone();
+            base.theme.clone_from(theme);
         }
         if let Some(position) = &cli.clock_position {
-            base.clock_position = position.clone();
+            base.clock_position.clone_from(position);
         }
         if let Some(show) = cli.show_seconds {
             base.show_seconds = show;
