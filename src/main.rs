@@ -4,6 +4,7 @@ mod anim;
 mod app;
 mod cli;
 mod clock;
+mod color;
 mod config;
 mod render;
 mod theme;

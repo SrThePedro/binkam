@@ -18,6 +18,7 @@ use crate::{
     anim,
     cli::Cli,
     clock::{HourFormat, motion::ClockPosition},
+    color::ColorSetting,
     theme::{self, Theme},
 };
 
@@ -57,6 +58,8 @@ pub struct Config {
     pub hour_format: u8,
     /// Whether to darken the animation behind the clock.
     pub clock_backdrop: bool,
+    /// How much colour to use: `auto`, `truecolor`, `256` or `none`.
+    pub color: String,
     /// Fixed randomness seed, or `None` for a different one every run.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
@@ -74,6 +77,7 @@ impl Default for Config {
             show_date: true,
             hour_format: HourFormat::H24.hours(),
             clock_backdrop: true,
+            color: ColorSetting::default().name().to_owned(),
             seed: None,
         }
     }
@@ -143,6 +147,9 @@ impl Config {
         if let Some(backdrop) = cli.backdrop() {
             base.clock_backdrop = backdrop;
         }
+        if let Some(color) = cli.color() {
+            base.color = color.name().to_owned();
+        }
         if let Some(seed) = cli.seed {
             base.seed = Some(seed);
         }
@@ -181,6 +188,13 @@ impl Config {
         if HourFormat::from_hours(self.hour_format).is_none() {
             bail!("hour_format must be 12 or 24, got {}", self.hour_format);
         }
+        if ColorSetting::by_name(&self.color).is_none() {
+            bail!(
+                "unknown color `{}`; known settings are {}",
+                self.color,
+                ColorSetting::all_names().join(", ")
+            );
+        }
         Ok(())
     }
 
@@ -201,6 +215,11 @@ impl Config {
     /// The hour format, already known to be valid.
     pub fn hour_format(&self) -> HourFormat {
         HourFormat::from_hours(self.hour_format).unwrap_or_default()
+    }
+
+    /// The colour setting, already known to be valid.
+    pub fn color_setting(&self) -> ColorSetting {
+        ColorSetting::by_name(&self.color).unwrap_or_default()
     }
 
     /// The clock position, already known to be valid.
@@ -503,6 +522,13 @@ mod tests {
                 },
                 "hour_format",
             ),
+            (
+                Config {
+                    color: "16".to_owned(),
+                    ..Config::default()
+                },
+                "unknown color",
+            ),
         ];
 
         for (config, expected) in cases {
@@ -539,6 +565,23 @@ mod tests {
     fn printed_settings_leave_out_an_unset_seed() {
         let text = Config::default().to_toml().unwrap();
         assert!(!text.contains("seed"), "{text}");
+    }
+
+    #[test]
+    fn the_colour_setting_comes_from_either_layer() {
+        let from_file: Config = toml::from_str(r#"color = "256""#).unwrap();
+        assert_eq!(from_file.color_setting(), ColorSetting::Indexed);
+
+        assert_eq!(
+            merged(Config::default(), &["--color", "none"]).color_setting(),
+            ColorSetting::None
+        );
+        assert_eq!(
+            merged(from_file, &["--no-color"]).color_setting(),
+            ColorSetting::None,
+            "--no-color has to beat the file"
+        );
+        assert_eq!(Config::default().color_setting(), ColorSetting::Auto);
     }
 
     #[test]

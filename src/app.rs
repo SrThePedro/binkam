@@ -25,6 +25,7 @@ use crate::{
         ClockWidget,
         motion::{ClockMotion, ClockPosition},
     },
+    color::{self, ColorDepth},
     config::Config,
     render,
     theme::Theme,
@@ -89,6 +90,8 @@ pub struct App {
     area: Rect,
     /// Colours for the clock and for whatever the animation draws.
     theme: Theme,
+    /// How much colour this terminal takes, worked out once at startup.
+    color: ColorDepth,
     /// Whether to darken the animation behind the clock.
     backdrop: bool,
     /// Randomness for picking the next animation and seeding it.
@@ -176,6 +179,7 @@ impl App {
             since_switch: Duration::ZERO,
             transition: None,
             theme,
+            color: config.color_setting().resolve(),
             theme_index,
             preview: cli.preview,
             backdrop: config.clock_backdrop,
@@ -374,6 +378,10 @@ impl App {
         self.clock.render(clock_area, buf);
         self.render_fps(area, buf);
         self.render_hint(area, buf);
+
+        // Last of all: everything above drew in truecolor, so this is the one
+        // place that has to know what the terminal can take.
+        color::reduce(buf, area, self.color);
     }
 
     /// Draw the counter in the top right corner, if it is enabled.
@@ -903,6 +911,52 @@ mod tests {
             app.handle_event(&key_code(code));
             assert!(!app.running, "{code:?} should quit outside preview mode");
         }
+    }
+
+    #[test]
+    fn colour_is_reduced_before_the_frame_leaves() {
+        let mut indexed = app_from(&["--anim", "fire", "--color", "256", "--seed", "1"]);
+        let buf = frame_buffer(&mut indexed, 60, 16);
+        let colors: Vec<Color> = (0..16)
+            .flat_map(|y| (0..60).map(move |x| (x, y)))
+            .map(|(x, y)| buf[(x, y)].fg)
+            .collect();
+        assert!(
+            colors.iter().any(|c| matches!(c, Color::Indexed(_))),
+            "nothing was quantized"
+        );
+        assert!(
+            !colors.iter().any(|c| matches!(c, Color::Rgb(..))),
+            "truecolor escaped into a 256 colour frame"
+        );
+
+        let mut plain = app_from(&["--anim", "fire", "--no-color", "--seed", "1"]);
+        let buf = frame_buffer(&mut plain, 60, 16);
+        for y in 0..16 {
+            for x in 0..60 {
+                assert!(
+                    !matches!(buf[(x, y)].fg, Color::Rgb(..) | Color::Indexed(_)),
+                    "colour left at {x},{y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_frame_without_colour_still_has_a_clock_and_a_fire() {
+        let mut app = app_from(&["--anim", "fire", "--no-color", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        // The fire needs a moment to grow past its bottom row.
+        for _ in 0..90 {
+            app.update(Duration::from_millis(33));
+        }
+        let rows = frame(&mut app, 80, 24);
+        let text = rows.join("\n");
+        assert!(text.contains('█'), "the clock went missing");
+        assert!(
+            text.contains('▀') || text.contains('▄'),
+            "the fire lost its shape: {text}"
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 use clap::Parser;
 
-use crate::{clock::HourFormat, config::MAX_FPS};
+use crate::{clock::HourFormat, color::ColorSetting, config::MAX_FPS};
 
 /// An animated, clock-centered terminal screensaver.
 #[derive(Debug, Parser)]
@@ -65,6 +65,20 @@ pub struct Cli {
     #[arg(long, conflicts_with = "backdrop")]
     pub no_backdrop: bool,
 
+    /// How much colour to use.
+    ///
+    /// `auto` works it out from COLORTERM, TERM and NO_COLOR.
+    #[arg(
+        long,
+        value_name = "MODE",
+        value_parser = clap::builder::PossibleValuesParser::new(ColorSetting::all_names()),
+    )]
+    pub color: Option<String>,
+
+    /// Shorthand for `--color none`.
+    #[arg(long, conflicts_with = "color")]
+    pub no_color: bool,
+
     /// Seed the randomness, for a reproducible picture.
     #[arg(long)]
     pub seed: Option<u64>,
@@ -120,6 +134,14 @@ impl Cli {
         } else {
             self.backdrop
         }
+    }
+
+    /// The colour setting asked for, or `None` to leave it to the file.
+    pub fn color(&self) -> Option<ColorSetting> {
+        if self.no_color {
+            return Some(ColorSetting::None);
+        }
+        ColorSetting::by_name(self.color.as_deref()?)
     }
 
     /// The hour format asked for, or `None` to leave it to the file.
@@ -194,6 +216,7 @@ mod tests {
         assert_eq!(cli.show_date, None);
         assert_eq!(cli.hour_format(), None);
         assert_eq!(cli.backdrop(), None);
+        assert_eq!(cli.color(), None);
         assert!(cli.anim.is_empty());
     }
 
@@ -213,6 +236,7 @@ mod tests {
             vec!["--theme", "nope"],
             vec!["--clock-position", "nope"],
             vec!["--hour-format", "13"],
+            vec!["--color", "16"],
             vec!["--fps", "0"],
             vec!["--fps", "9999"],
         ] {
@@ -241,6 +265,16 @@ mod tests {
             cli(&["--hour-format", "24"]).hour_format(),
             Some(HourFormat::H24)
         );
+    }
+
+    #[test]
+    fn colour_has_a_shorthand_for_none() {
+        assert_eq!(cli(&["--no-color"]).color(), Some(ColorSetting::None));
+        assert_eq!(
+            cli(&["--color", "truecolor"]).color(),
+            Some(ColorSetting::Truecolor)
+        );
+        assert!(Cli::try_parse_from(["kumsaati", "--color", "256", "--no-color"]).is_err());
     }
 
     #[test]

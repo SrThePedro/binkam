@@ -108,7 +108,7 @@ Amaç: Kullanıcı kodu değiştirmeden özelleştirebilsin.
 ## Faz 6 — Cila ve performans
 Amaç: Her terminalde düzgün, hafif.
 
-- [ ] Renk desteği tespiti: `COLORTERM` yoksa 256 renge düş; `--no-color` modu
+- [x] Renk desteği tespiti: `COLORTERM` yoksa 256 renge düş; `--no-color` modu
 - [ ] Fare hareketi/tıklama ile çıkış (mouse capture aç, çıkışta mutlaka kapat)
 - [ ] CPU ölçümü (release, 30 FPS, 200x50): her animasyon için not et; ağır olanı optimize et
       (render'da allocation yok, gereksiz `Color::Rgb` hesapları önbellekte)
