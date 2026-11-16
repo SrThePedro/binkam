@@ -10,7 +10,7 @@ Amaç: Boş ama sağlam bir döngü. Terminal asla bozuk kalmasın.
 
 - [x] `cargo init --name kumsaati`, edition 2024, `git init`
 - [ ] Bağımlılıklar: `ratatui`, `color-eyre`, `clap` (derive)
-- [ ] `main.rs`: `color_eyre::install()`, `ratatui::init()`, `App::run`, `ratatui::restore()`
+- [x] `main.rs`: `color_eyre::install()`, `ratatui::init()`, `App::run`, `ratatui::restore()`
 - [ ] `app.rs`: sabit FPS döngüsü (varsayılan 30), `event::poll(timeout)` ile olay bekleme
 - [ ] Herhangi bir tuş → çıkış (yalnızca `KeyEventKind::Press`)
 - [ ] Açılışta ~300 ms "grace period": bu sürede gelen olaylar yok sayılır
