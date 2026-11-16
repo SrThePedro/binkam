@@ -92,14 +92,14 @@ kombinasyonlar gezilebiliyor.
 ## Faz 5 — Ayarlar ve CLI
 Amaç: Kullanıcı kodu değiştirmeden özelleştirebilsin.
 
-- [ ] `config.rs`: `serde` + `toml`; yol `directories::ProjectDirs` ile
+- [x] `config.rs`: `serde` + `toml`; yol `directories::ProjectDirs` ile
       (Linux `~/.config/kumsaati/config.toml`, Windows `%APPDATA%\kumsaati\...`)
-- [ ] Öncelik: CLI > config dosyası > varsayılan
-- [ ] Seçenekler: `fps`, `anim` (veya liste), `cycle_minutes`, `theme`, `clock_position`,
+- [x] Öncelik: CLI > config dosyası > varsayılan
+- [x] Seçenekler: `fps`, `anim` (veya liste), `cycle_minutes`, `theme`, `clock_position`,
       `show_seconds`, `show_date`, `hour_format` (24/12), `clock_backdrop`, `seed`
-- [ ] `--print-config`: geçerli birleşik ayarı TOML olarak bas
-- [ ] Bozuk config → anlaşılır hata mesajı (satır numarasıyla), çökme değil
-- [ ] Test: birleştirme önceliği, varsayılanlar, hatalı TOML
+- [x] `--print-config`: geçerli birleşik ayarı TOML olarak bas
+- [x] Bozuk config → anlaşılır hata mesajı (satır numarasıyla), çökme değil
+- [x] Test: birleştirme önceliği, varsayılanlar, hatalı TOML
 
 **Bitti:** Örnek `config.toml` README'de; her seçenek CLI'dan ve dosyadan çalışıyor.
 

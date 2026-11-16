@@ -25,6 +25,7 @@ use crate::{
         ClockWidget,
         motion::{ClockMotion, ClockPosition},
     },
+    config::Config,
     render,
     theme::Theme,
 };
@@ -92,7 +93,9 @@ pub struct App {
     backdrop: bool,
     /// Randomness for picking the next animation and seeding it.
     rng: StdRng,
-    /// Index of the running animation in `anim::all_names`.
+    /// The animations this run draws from, in registry order.
+    anim_pool: Vec<&'static str>,
+    /// Index of the running animation in `anim_pool`.
     anim_index: usize,
     /// How long to wait between animation changes, or `None` for never.
     cycle_interval: Option<Duration>,
@@ -113,37 +116,39 @@ pub struct App {
 }
 
 impl App {
-    /// Build an app from parsed command line arguments.
-    pub fn new(cli: &Cli) -> color_eyre::Result<Self> {
-        let mut rng = StdRng::seed_from_u64(cli.resolved_seed());
-        let names = crate::anim::all_names();
+    /// Build an app from the merged settings.
+    ///
+    /// `config` carries everything the file and the command line agreed on;
+    /// `cli` is still needed for the flags that only make sense for one run,
+    /// such as preview mode.
+    pub fn new(cli: &Cli, config: &Config) -> color_eyre::Result<Self> {
+        let mut rng = StdRng::seed_from_u64(config.resolved_seed());
 
-        let anim_index = match &cli.anim {
-            Some(name) => names
-                .iter()
-                .position(|known| known == name)
-                .ok_or_else(|| eyre!("unknown animation `{name}`; try --list"))?,
-            // Nothing pinned: start somewhere random and keep changing.
-            None => rng.random_range(0..names.len()),
+        let anim_pool = config.animation_pool();
+        if anim_pool.is_empty() {
+            return Err(eyre!("no animations to draw from"));
+        }
+        // One animation is a pin; several mean start somewhere random.
+        let anim_index = if anim_pool.len() == 1 {
+            0
+        } else {
+            rng.random_range(0..anim_pool.len())
         };
-        let animation = crate::anim::by_name(names[anim_index], rng.random::<u64>())
-            .ok_or_else(|| eyre!("unknown animation `{}`; try --list", names[anim_index]))?;
+        let animation = crate::anim::by_name(anim_pool[anim_index], rng.random::<u64>())
+            .ok_or_else(|| eyre!("unknown animation `{}`; try --list", anim_pool[anim_index]))?;
 
         let theme_names = Theme::all_names();
         let theme_index = theme_names
             .iter()
-            .position(|known| *known == cli.theme)
-            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
+            .position(|known| *known == config.theme)
+            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", config.theme))?;
         let theme = Theme::by_name(theme_names[theme_index])
-            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", cli.theme))?;
-
-        let position = ClockPosition::by_name(&cli.clock_position)
-            .ok_or_else(|| eyre!("unknown clock position `{}`", cli.clock_position))?;
+            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", config.theme))?;
 
         let mut clock = ClockWidget::new().with_format(
-            cli.show_seconds.unwrap_or(true),
-            cli.show_date.unwrap_or(true),
-            cli.hour_format().unwrap_or_default(),
+            config.show_seconds,
+            config.show_date,
+            config.hour_format(),
         );
         clock.digit_color = theme.clock_color();
         clock.date_color = theme.date_color();
@@ -153,21 +158,27 @@ impl App {
 
         Ok(Self {
             running: true,
-            frame_time: cli.frame_time(),
+            frame_time: config.frame_time(),
             uptime: Duration::ZERO,
             clock,
-            motion: ClockMotion::new(position),
+            motion: ClockMotion::new(config.clock_position()),
             animation,
             area: Rect::ZERO,
             rng,
+            anim_pool,
             anim_index,
-            cycle_interval: cli.cycle_interval(),
+            // Browsing by hand and changing on a timer would fight.
+            cycle_interval: if cli.preview {
+                None
+            } else {
+                config.cycle_interval()
+            },
             since_switch: Duration::ZERO,
             transition: None,
             theme,
             theme_index,
             preview: cli.preview,
-            backdrop: cli.backdrop().unwrap_or(true),
+            backdrop: config.clock_backdrop,
             // Preview mode needs the readout to say what is on screen.
             show_fps: cli.show_fps || cli.preview,
             fps: 0.0,
@@ -217,11 +228,11 @@ impl App {
         }
     }
 
-    /// Start fading over to the animation at `index`.
+    /// Start fading over to the animation at `index` of the pool.
     fn start_switch(&mut self, index: usize) {
-        let names = crate::anim::all_names();
-        let index = index % names.len();
-        let Some(mut next) = crate::anim::by_name(names[index], self.rng.random::<u64>()) else {
+        let index = index % self.anim_pool.len();
+        let name = self.anim_pool[index];
+        let Some(mut next) = crate::anim::by_name(name, self.rng.random::<u64>()) else {
             return;
         };
 
@@ -234,9 +245,9 @@ impl App {
         });
     }
 
-    /// A random animation that is not the one already running.
+    /// A random animation from the pool that is not the one already running.
     fn other_animation(&mut self) -> usize {
-        let count = crate::anim::all_names().len();
+        let count = self.anim_pool.len();
         if count < 2 {
             return self.anim_index;
         }
@@ -399,7 +410,7 @@ impl App {
             return;
         }
 
-        let count = crate::anim::all_names().len();
+        let count = self.anim_pool.len();
         match key.code {
             KeyCode::Char('q' | 'Q') | KeyCode::Esc => self.running = false,
             KeyCode::Char('n' | 'N') | KeyCode::Right => self.start_switch(self.anim_index + 1),
@@ -473,16 +484,16 @@ fn backdrop_rect(clock: Rect, area: Rect) -> Rect {
 ///
 /// This never touches the real terminal, which makes it safe to run from
 /// scripts and from an agent session.
-pub fn dump_frame(cli: &Cli) -> color_eyre::Result<()> {
+pub fn dump_frame(cli: &Cli, config: &Config) -> color_eyre::Result<()> {
     let (width, height) = cli.dump_size();
     let mut terminal = Terminal::new(TestBackend::new(width, height))?;
-    let mut app = App::new(cli)?;
+    let mut app = App::new(cli, config)?;
 
     app.resize(Rect::new(0, 0, width, height));
     // Simulate a few seconds so the picture is representative: effects that
     // fall in from off screen look empty on their first frame.
     for _ in 0..DUMP_WARMUP_FRAMES {
-        app.update(cli.frame_time());
+        app.update(config.frame_time());
     }
     terminal.draw(|frame| app.render(frame))?;
 
@@ -509,10 +520,17 @@ mod tests {
     use clap::Parser;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventState, KeyModifiers};
 
+    /// Build an app from arguments alone.
+    ///
+    /// Deliberately starts from `Config::default()` rather than
+    /// `Config::resolve`, so tests never depend on the config file that
+    /// happens to be on the machine running them.
     fn app_from(args: &[&str]) -> App {
         let mut full = vec!["kumsaati"];
         full.extend_from_slice(args);
-        App::new(&Cli::parse_from(full)).expect("the default animation must exist")
+        let cli = Cli::parse_from(full);
+        let config = Config::merge(Config::default(), &cli).expect("valid settings");
+        App::new(&cli, &config).expect("the default animation must exist")
     }
 
     fn app() -> App {
@@ -590,9 +608,39 @@ mod tests {
 
     #[test]
     fn unknown_animation_is_an_error() {
-        let mut cli = Cli::parse_from(["kumsaati"]);
-        cli.anim = Some("nope".to_owned());
-        assert!(App::new(&cli).is_err());
+        let cli = Cli::parse_from(["kumsaati"]);
+        let config = Config {
+            anim: vec!["nope".to_owned()],
+            ..Config::default()
+        };
+        assert!(App::new(&cli, &config).is_err());
+    }
+
+    #[test]
+    fn a_pool_of_one_pins_the_animation() {
+        let app = app_from(&["--anim", "fire"]);
+        assert_eq!(app.anim_pool, ["fire"]);
+        assert_eq!(app.anim_index, 0);
+        assert_eq!(app.cycle_interval, None);
+    }
+
+    #[test]
+    fn a_pool_of_two_cycles_between_just_those() {
+        let mut app = app_from(&["--anim", "fire", "--anim", "snow", "--seed", "1"]);
+        assert_eq!(app.anim_pool, ["fire", "snow"]);
+        assert!(app.cycle_interval.is_some());
+
+        for _ in 0..50 {
+            let next = app.other_animation();
+            assert!(next < 2, "stepped outside the pool");
+            app.anim_index = next;
+        }
+    }
+
+    #[test]
+    fn preview_never_cycles_on_a_timer() {
+        let app = app_from(&["--preview", "--cycle-minutes", "1"]);
+        assert_eq!(app.cycle_interval, None);
     }
 
     #[test]
@@ -775,8 +823,8 @@ mod tests {
 
     #[test]
     fn preview_steps_through_the_animations() {
-        let names = crate::anim::all_names();
         let mut app = preview();
+        let names = app.anim_pool.clone();
         let start = app.anim_index;
 
         app.handle_event(&key_code(KeyCode::Char('n')));
@@ -860,9 +908,10 @@ mod tests {
     #[test]
     fn dump_renders_requested_size() {
         let cli = Cli::parse_from(["kumsaati", "--dump-frame", "--size", "20x5"]);
+        let config = Config::merge(Config::default(), &cli).unwrap();
         let (width, height) = cli.dump_size();
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        let app = App::new(&cli).unwrap();
+        let app = App::new(&cli, &config).unwrap();
         terminal.draw(|frame| app.render(frame)).unwrap();
 
         let text = buffer_to_text(terminal.backend().buffer());

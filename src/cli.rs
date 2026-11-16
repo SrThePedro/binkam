@@ -1,66 +1,49 @@
 //! Command line interface definition.
+//!
+//! Every setting that also lives in the config file is an `Option` here, so
+//! that "not given" can be told apart from "given this value". The merging
+//! itself is [`crate::config::Config`]'s job.
 
 use clap::Parser;
 
-use crate::clock::HourFormat;
+use crate::{clock::HourFormat, config::MAX_FPS};
 
 /// An animated, clock-centered terminal screensaver.
 #[derive(Debug, Parser)]
 #[command(name = "kumsaati", version, about)]
 pub struct Cli {
     /// Target frames per second for the render loop.
-    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u16).range(1..=240))]
-    pub fps: u16,
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=i64::from(MAX_FPS)))]
+    pub fps: Option<u16>,
 
-    /// Render a single frame to stdout as plain text and exit.
+    /// Background animation to use; repeat to cycle through several.
     ///
-    /// Uses a headless backend, so the real terminal is never touched.
-    #[arg(long)]
-    pub dump_frame: bool,
-
-    /// Terminal size used by `--dump-frame`, given as WIDTHxHEIGHT (e.g. 80x24).
-    #[arg(long, value_parser = parse_size)]
-    pub size: Option<(u16, u16)>,
-
-    /// Background animation to run.
-    ///
-    /// Left out, the screensaver starts on a random one and keeps changing.
+    /// Left out, every animation is used.
     #[arg(
         long,
         value_parser = clap::builder::PossibleValuesParser::new(crate::anim::all_names()),
     )]
-    pub anim: Option<String>,
+    pub anim: Vec<String>,
 
     /// Minutes between automatic animation changes; 0 turns it off.
-    ///
-    /// Defaults to off when --anim pins one animation, and to a few minutes
-    /// otherwise.
     #[arg(long)]
     pub cycle_minutes: Option<u64>,
 
-    /// List the available animations and exit.
-    #[arg(long)]
-    pub list: bool,
+    /// Colour theme for the clock and the animations.
+    #[arg(
+        long,
+        value_parser = clap::builder::PossibleValuesParser::new(crate::theme::Theme::all_names()),
+    )]
+    pub theme: Option<String>,
 
-    /// List the available colour themes and exit.
-    #[arg(long)]
-    pub list_themes: bool,
-
-    /// Seed the animation's randomness, for a reproducible picture.
-    #[arg(long)]
-    pub seed: Option<u64>,
-
-    /// Show a frames-per-second counter in the top right corner.
-    #[arg(long)]
-    pub show_fps: bool,
-
-    /// Darken the animation behind the clock, so the digits stay legible.
-    #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
-    pub backdrop: Option<bool>,
-
-    /// Shorthand for `--backdrop false`.
-    #[arg(long, conflicts_with = "backdrop")]
-    pub no_backdrop: bool,
+    /// Where the clock sits on screen, and whether it moves.
+    #[arg(
+        long,
+        value_parser = clap::builder::PossibleValuesParser::new(
+            crate::clock::motion::ClockPosition::all_names(),
+        ),
+    )]
+    pub clock_position: Option<String>,
 
     /// Show the seconds as part of the time.
     #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
@@ -74,15 +57,25 @@ pub struct Cli {
     #[arg(long, value_name = "HOURS", value_parser = ["12", "24"])]
     pub hour_format: Option<String>,
 
-    /// Where the clock sits on screen, and whether it moves.
-    #[arg(
-        long,
-        default_value = "center",
-        value_parser = clap::builder::PossibleValuesParser::new(
-            crate::clock::motion::ClockPosition::all_names(),
-        ),
-    )]
-    pub clock_position: String,
+    /// Darken the animation behind the clock, so the digits stay legible.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
+    pub backdrop: Option<bool>,
+
+    /// Shorthand for `--backdrop false`.
+    #[arg(long, conflicts_with = "backdrop")]
+    pub no_backdrop: bool,
+
+    /// Seed the randomness, for a reproducible picture.
+    #[arg(long)]
+    pub seed: Option<u64>,
+
+    /// Read settings from this file instead of the usual place.
+    #[arg(long, value_name = "PATH")]
+    pub config: Option<String>,
+
+    /// Print the settings this run would use, as TOML, and exit.
+    #[arg(long)]
+    pub print_config: bool,
 
     /// Browse animations and themes instead of quitting on a key press.
     ///
@@ -91,17 +84,28 @@ pub struct Cli {
     #[arg(long)]
     pub preview: bool,
 
-    /// Colour theme for the clock and the animations.
-    #[arg(
-        long,
-        default_value = crate::theme::DEFAULT,
-        value_parser = clap::builder::PossibleValuesParser::new(crate::theme::Theme::all_names()),
-    )]
-    pub theme: String,
-}
+    /// Show a status and frames-per-second readout in the top right corner.
+    #[arg(long)]
+    pub show_fps: bool,
 
-/// Minutes between animation changes when nothing says otherwise.
-const DEFAULT_CYCLE_MINUTES: u64 = 3;
+    /// List the available animations and exit.
+    #[arg(long)]
+    pub list: bool,
+
+    /// List the available colour themes and exit.
+    #[arg(long)]
+    pub list_themes: bool,
+
+    /// Render a single frame to stdout as plain text and exit.
+    ///
+    /// Uses a headless backend, so the real terminal is never touched.
+    #[arg(long)]
+    pub dump_frame: bool,
+
+    /// Terminal size used by `--dump-frame`, given as WIDTHxHEIGHT (e.g. 80x24).
+    #[arg(long, value_parser = parse_size)]
+    pub size: Option<(u16, u16)>,
+}
 
 impl Cli {
     /// Size to use for a headless frame dump, falling back to a sane default.
@@ -109,13 +113,7 @@ impl Cli {
         self.size.unwrap_or((80, 24))
     }
 
-    /// Duration of a single frame derived from [`Cli::fps`].
-    pub fn frame_time(&self) -> std::time::Duration {
-        std::time::Duration::from_secs_f64(1.0 / f64::from(self.fps))
-    }
-
-    /// Whether to darken behind the clock, or `None` to leave it to the
-    /// config file.
+    /// Whether to darken behind the clock, or `None` to leave it to the file.
     pub fn backdrop(&self) -> Option<bool> {
         if self.no_backdrop {
             Some(false)
@@ -124,33 +122,12 @@ impl Cli {
         }
     }
 
-    /// The hour format asked for, or `None` to leave it to the config file.
+    /// The hour format asked for, or `None` to leave it to the file.
     ///
     /// The value parser has already limited this to `12` or `24`.
     pub fn hour_format(&self) -> Option<HourFormat> {
         let hours = self.hour_format.as_deref()?.parse().ok()?;
         HourFormat::from_hours(hours)
-    }
-
-    /// How long to wait between animation changes, or `None` for never.
-    pub fn cycle_interval(&self) -> Option<std::time::Duration> {
-        let minutes = match self.cycle_minutes {
-            Some(minutes) => minutes,
-            // Pinning one animation turns cycling off, and so does preview
-            // mode, where changing animation is the user's job.
-            None if self.anim.is_some() || self.preview => 0,
-            None => DEFAULT_CYCLE_MINUTES,
-        };
-        (minutes > 0).then(|| std::time::Duration::from_secs(minutes * 60))
-    }
-
-    /// The seed to hand animations: the one given, or a fresh one per run.
-    pub fn resolved_seed(&self) -> u64 {
-        self.seed.unwrap_or_else(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0x5EED_5EED, |since| since.as_nanos() as u64)
-        })
     }
 }
 
@@ -180,6 +157,12 @@ fn parse_size(raw: &str) -> Result<(u16, u16), String> {
 mod tests {
     use super::*;
 
+    fn cli(args: &[&str]) -> Cli {
+        let mut full = vec!["kumsaati"];
+        full.extend_from_slice(args);
+        Cli::parse_from(full)
+    }
+
     #[test]
     fn parses_valid_sizes() {
         assert_eq!(parse_size("80x24").unwrap(), (80, 24));
@@ -194,120 +177,70 @@ mod tests {
     }
 
     #[test]
-    fn frame_time_matches_fps() {
-        let cli = Cli::parse_from(["kumsaati", "--fps", "50"]);
-        assert_eq!(cli.frame_time(), std::time::Duration::from_millis(20));
-    }
-
-    #[test]
     fn dump_size_defaults_to_80x24() {
-        let cli = Cli::parse_from(["kumsaati"]);
-        assert_eq!(cli.dump_size(), (80, 24));
+        assert_eq!(cli(&[]).dump_size(), (80, 24));
+        assert_eq!(cli(&["--size", "40x10"]).dump_size(), (40, 10));
     }
 
     #[test]
-    fn no_animation_is_pinned_by_default() {
-        let cli = Cli::parse_from(["kumsaati"]);
-        assert_eq!(cli.anim, None);
+    fn nothing_is_set_without_arguments() {
+        let cli = cli(&[]);
+        assert_eq!(cli.fps, None);
+        assert_eq!(cli.theme, None);
+        assert_eq!(cli.clock_position, None);
+        assert_eq!(cli.cycle_minutes, None);
+        assert_eq!(cli.seed, None);
+        assert_eq!(cli.show_seconds, None);
+        assert_eq!(cli.show_date, None);
+        assert_eq!(cli.hour_format(), None);
+        assert_eq!(cli.backdrop(), None);
+        assert!(cli.anim.is_empty());
     }
 
     #[test]
-    fn cycling_is_on_by_default_and_off_once_an_animation_is_pinned() {
-        let roaming = Cli::parse_from(["kumsaati"]);
+    fn anim_can_be_repeated() {
+        assert_eq!(cli(&["--anim", "fire"]).anim, ["fire"]);
         assert_eq!(
-            roaming.cycle_interval(),
-            Some(std::time::Duration::from_secs(DEFAULT_CYCLE_MINUTES * 60))
+            cli(&["--anim", "fire", "--anim", "snow"]).anim,
+            ["fire", "snow"]
         );
+    }
 
-        let pinned = Cli::parse_from(["kumsaati", "--anim", "fire"]);
-        assert_eq!(pinned.cycle_interval(), None);
+    #[test]
+    fn unknown_names_are_rejected_up_front() {
+        for bad in [
+            vec!["--anim", "nope"],
+            vec!["--theme", "nope"],
+            vec!["--clock-position", "nope"],
+            vec!["--hour-format", "13"],
+            vec!["--fps", "0"],
+            vec!["--fps", "9999"],
+        ] {
+            let mut full = vec!["kumsaati"];
+            full.extend_from_slice(&bad);
+            assert!(Cli::try_parse_from(full).is_err(), "{bad:?} should fail");
+        }
     }
 
     #[test]
     fn backdrop_has_three_states() {
-        assert_eq!(Cli::parse_from(["kumsaati"]).backdrop(), None);
-        assert_eq!(
-            Cli::parse_from(["kumsaati", "--backdrop"]).backdrop(),
-            Some(true)
-        );
-        assert_eq!(
-            Cli::parse_from(["kumsaati", "--backdrop", "false"]).backdrop(),
-            Some(false)
-        );
-        assert_eq!(
-            Cli::parse_from(["kumsaati", "--no-backdrop"]).backdrop(),
-            Some(false)
-        );
+        assert_eq!(cli(&[]).backdrop(), None);
+        assert_eq!(cli(&["--backdrop"]).backdrop(), Some(true));
+        assert_eq!(cli(&["--backdrop", "false"]).backdrop(), Some(false));
+        assert_eq!(cli(&["--no-backdrop"]).backdrop(), Some(false));
         assert!(Cli::try_parse_from(["kumsaati", "--backdrop", "--no-backdrop"]).is_err());
     }
 
     #[test]
     fn hour_format_accepts_only_twelve_or_twenty_four() {
-        assert_eq!(Cli::parse_from(["kumsaati"]).hour_format(), None);
         assert_eq!(
-            Cli::parse_from(["kumsaati", "--hour-format", "12"]).hour_format(),
+            cli(&["--hour-format", "12"]).hour_format(),
             Some(HourFormat::H12)
         );
         assert_eq!(
-            Cli::parse_from(["kumsaati", "--hour-format", "24"]).hour_format(),
+            cli(&["--hour-format", "24"]).hour_format(),
             Some(HourFormat::H24)
         );
-        assert!(Cli::try_parse_from(["kumsaati", "--hour-format", "13"]).is_err());
-    }
-
-    #[test]
-    fn preview_mode_does_not_cycle_on_its_own() {
-        let cli = Cli::parse_from(["kumsaati", "--preview"]);
-        assert_eq!(cli.cycle_interval(), None);
-    }
-
-    #[test]
-    fn an_explicit_interval_wins_either_way() {
-        let forced = Cli::parse_from(["kumsaati", "--anim", "fire", "--cycle-minutes", "5"]);
-        assert_eq!(
-            forced.cycle_interval(),
-            Some(std::time::Duration::from_secs(300))
-        );
-
-        let disabled = Cli::parse_from(["kumsaati", "--cycle-minutes", "0"]);
-        assert_eq!(disabled.cycle_interval(), None);
-    }
-
-    #[test]
-    fn defaults_to_a_known_theme() {
-        let cli = Cli::parse_from(["kumsaati"]);
-        assert_eq!(cli.theme, crate::theme::DEFAULT);
-        assert!(crate::theme::Theme::by_name(&cli.theme).is_some());
-    }
-
-    #[test]
-    fn defaults_to_a_known_clock_position() {
-        use crate::clock::motion::ClockPosition;
-        let cli = Cli::parse_from(["kumsaati"]);
-        assert_eq!(cli.clock_position, "center");
-        assert!(ClockPosition::by_name(&cli.clock_position).is_some());
-    }
-
-    #[test]
-    fn rejects_unknown_clock_positions() {
-        assert!(Cli::try_parse_from(["kumsaati", "--clock-position", "nope"]).is_err());
-    }
-
-    #[test]
-    fn rejects_unknown_themes() {
-        assert!(Cli::try_parse_from(["kumsaati", "--theme", "nope"]).is_err());
-    }
-
-    #[test]
-    fn rejects_unknown_animations() {
-        assert!(Cli::try_parse_from(["kumsaati", "--anim", "nope"]).is_err());
-    }
-
-    #[test]
-    fn an_explicit_seed_is_stable_across_calls() {
-        let cli = Cli::parse_from(["kumsaati", "--seed", "7"]);
-        assert_eq!(cli.resolved_seed(), 7);
-        assert_eq!(cli.resolved_seed(), 7);
     }
 
     #[test]
