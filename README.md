@@ -371,4 +371,14 @@ float-to-integer `as` cast saturates rather than wrapping.
 
 ## License
 
-Not yet chosen.
+Either of
+
+- MIT ([LICENSE-MIT](LICENSE-MIT), or <https://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE), or
+  <https://www.apache.org/licenses/LICENSE-2.0>)
+
+whichever suits you. This is the pair the Rust project itself uses: MIT is
+short and permissive, Apache-2.0 adds an explicit patent grant.
+
+Unless you say otherwise, any contribution you deliberately submit for
+inclusion in this work is licensed the same way, with no further conditions.
