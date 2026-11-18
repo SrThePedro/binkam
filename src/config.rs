@@ -608,9 +608,14 @@ mod tests {
         let Some(path) = Config::default_path() else {
             return; // no home directory on this platform
         };
+        assert!(path.ends_with(FILE_NAME), "{path:?} is not the config file");
+        // Where the app's own directory sits differs between platforms:
+        // Linux ends the path with `binkam/config.toml`, Windows with
+        // `binkam/config/config.toml`. So only that the name appears can be
+        // checked, not where it appears.
         assert!(
-            path.ends_with(Path::new(APP_NAME).join(FILE_NAME)),
-            "{path:?}"
+            path.components().any(|part| part.as_os_str() == APP_NAME),
+            "{path:?} should be somewhere under {APP_NAME}"
         );
     }
 }

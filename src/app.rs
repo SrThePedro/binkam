@@ -581,8 +581,19 @@ mod tests {
     /// Deliberately starts from `Config::default()` rather than
     /// `Config::resolve`, so tests never depend on the config file that
     /// happens to be on the machine running them.
+    ///
+    /// The colour depth is pinned for the same reason: the default is `auto`,
+    /// which reads COLORTERM and TERM, and a machine without them reduces
+    /// every frame to no colour at all. Tests that are themselves about
+    /// colour say so and are left alone.
     fn app_from(args: &[&str]) -> App {
         let mut full = vec!["binkam"];
+        let picks_colour = args
+            .iter()
+            .any(|arg| *arg == "--color" || *arg == "--no-color");
+        if !picks_colour {
+            full.extend_from_slice(&["--color", "truecolor"]);
+        }
         full.extend_from_slice(args);
         let cli = Cli::parse_from(full);
         let config = Config::merge(Config::default(), &cli).expect("valid settings");
@@ -835,6 +846,8 @@ mod tests {
         let mut shaded = app_from(&["--anim", "starfield", "--seed", "11"]);
         let dimmed = frame_buffer(&mut shaded, width, height);
 
+        // Only the animation uses Rgb, and only truecolor keeps it that way,
+        // which `app_from` pins for exactly this reason.
         let box_area = backdrop_rect(shaded.clock.occupied_area(area).unwrap(), area);
         let mut dimmed_cells = 0;
 
@@ -1132,7 +1145,14 @@ mod tests {
 
     #[test]
     fn dump_renders_requested_size() {
-        let cli = Cli::parse_from(["binkam", "--dump-frame", "--size", "20x5"]);
+        let cli = Cli::parse_from([
+            "binkam",
+            "--dump-frame",
+            "--size",
+            "20x5",
+            "--color",
+            "truecolor",
+        ]);
         let config = Config::merge(Config::default(), &cli).unwrap();
         let (width, height) = cli.dump_size();
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
