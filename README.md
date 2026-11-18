@@ -1,5 +1,7 @@
 # binkam
 
+[![CI](https://github.com/SrThePedro/binkam/actions/workflows/ci.yml/badge.svg)](https://github.com/SrThePedro/binkam/actions/workflows/ci.yml)
+
 An animated, clock-centered terminal screensaver. A big block-font clock sits on
 top of a changeable background effect; any key press puts the terminal back the
 way it was.
