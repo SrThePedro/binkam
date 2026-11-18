@@ -242,9 +242,10 @@ without one the defaults apply.
 | Linux | `~/.config/binkam/config.toml` |
 | Windows | `%APPDATA%\binkam\config\config.toml` |
 
-`binkam --config path/to/file.toml` reads somewhere else instead, and
-`binkam --print-config` prints the settings a run would end up with, which is
-the quickest way to check a file is being picked up.
+`binkam --config path/to/file.toml` uses somewhere else instead, for both
+reading and saving; a file that is not there yet is fine, and the first save
+creates it. `binkam --print-config` prints the settings a run would end up
+with, which is the quickest way to check a file is being picked up.
 
 Every key is optional. A broken file is reported with the line and column that
 went wrong, rather than being ignored or crashing.

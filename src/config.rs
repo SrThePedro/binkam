@@ -145,15 +145,21 @@ impl Config {
     }
 
     /// The file layer: whichever file applies, or the defaults.
+    ///
+    /// A file that is not there yet is not an error, wherever it was named.
+    /// The settings mode writes this same path, so `--config` means "use
+    /// this file", not "this file already exists"; a run that creates it on
+    /// the first save would otherwise have no way to get started.
     fn from_layers(cli: &Cli) -> Result<Self> {
-        match cli.config.as_deref() {
-            // A file named on the command line has to be there.
-            Some(path) => Self::from_file(Path::new(path)),
-            None => match Self::default_path() {
-                Some(path) if path.is_file() => Self::from_file(&path),
-                // No file at all is perfectly normal.
-                _ => Ok(Self::default()),
-            },
+        let path = match Self::save_path(cli) {
+            Some(path) => path,
+            // A platform with no notion of a home has only the defaults.
+            None => return Ok(Self::default()),
+        };
+        if path.exists() {
+            Self::from_file(&path)
+        } else {
+            Ok(Self::default())
         }
     }
 
@@ -575,6 +581,37 @@ mod tests {
         let path = Path::new("/definitely/not/here/binkam.toml");
         let error = format!("{:#}", Config::from_file(path).unwrap_err());
         assert!(error.contains("/definitely/not/here"), "{error}");
+    }
+
+    #[test]
+    fn a_config_file_that_is_not_there_yet_is_not_an_error() {
+        // The settings mode writes this path on the first save, so naming
+        // one that does not exist is how a fresh file gets started.
+        let path = scratch_path("config.toml");
+        assert!(!path.exists());
+        let settings = Config::resolve(&cli(&[
+            "--config",
+            path.to_str().expect("a utf-8 temporary path"),
+        ]))
+        .expect("a missing file should leave the defaults alone");
+        assert_eq!(settings, Config::default());
+    }
+
+    #[test]
+    fn a_broken_config_file_is_still_an_error() {
+        let path = scratch_path("config.toml");
+        std::fs::create_dir_all(path.parent().expect("a parent")).unwrap();
+        std::fs::write(&path, "fps = \"lots\"\n").unwrap();
+
+        let error = Config::resolve(&cli(&[
+            "--config",
+            path.to_str().expect("a utf-8 temporary path"),
+        ]))
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("could not parse"), "{error}");
+
+        let _ = std::fs::remove_dir_all(path.parent().expect("a parent"));
     }
 
     #[test]
