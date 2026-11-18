@@ -17,7 +17,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::{
     anim,
     cli::Cli,
-    clock::{HourFormat, motion::ClockPosition},
+    clock::{
+        HourFormat,
+        font::{self, Font},
+        motion::ClockPosition,
+    },
     color::ColorSetting,
     theme::{self, Theme},
 };
@@ -50,6 +54,10 @@ pub struct Config {
     pub theme: String,
     /// Clock position mode name.
     pub clock_position: String,
+    /// Name of the glyph set the big clock is drawn with.
+    pub clock_font: String,
+    /// How many cells wide and tall one glyph pixel becomes, 1 to 4.
+    pub clock_scale: u8,
     /// Whether the time carries its seconds.
     pub show_seconds: bool,
     /// Whether the date line is drawn.
@@ -73,6 +81,8 @@ impl Default for Config {
             cycle_minutes: 3,
             theme: theme::DEFAULT.to_owned(),
             clock_position: "center".to_owned(),
+            clock_font: font::DEFAULT.to_owned(),
+            clock_scale: 1,
             show_seconds: true,
             show_date: true,
             hour_format: HourFormat::H24.hours(),
@@ -135,6 +145,12 @@ impl Config {
         if let Some(position) = &cli.clock_position {
             base.clock_position.clone_from(position);
         }
+        if let Some(name) = &cli.clock_font {
+            base.clock_font.clone_from(name);
+        }
+        if let Some(scale) = cli.clock_scale {
+            base.clock_scale = scale;
+        }
         if let Some(show) = cli.show_seconds {
             base.show_seconds = show;
         }
@@ -185,6 +201,20 @@ impl Config {
                 ClockPosition::all_names().join(", ")
             );
         }
+        if Font::by_name(&self.clock_font).is_none() {
+            bail!(
+                "unknown clock_font `{}`; known fonts are {}",
+                self.clock_font,
+                Font::all_names().join(", ")
+            );
+        }
+        if self.clock_scale == 0 || self.clock_scale > font::MAX_SCALE {
+            bail!(
+                "clock_scale must be between 1 and {}, got {}",
+                font::MAX_SCALE,
+                self.clock_scale
+            );
+        }
         if HourFormat::from_hours(self.hour_format).is_none() {
             bail!("hour_format must be 12 or 24, got {}", self.hour_format);
         }
@@ -225,6 +255,11 @@ impl Config {
     /// The clock position, already known to be valid.
     pub fn clock_position(&self) -> ClockPosition {
         ClockPosition::by_name(&self.clock_position).unwrap_or(ClockPosition::Center)
+    }
+
+    /// The clock font, already known to be valid.
+    pub fn clock_font(&self) -> &'static Font {
+        Font::by_name(&self.clock_font).unwrap_or_else(Font::fallback)
     }
 
     /// The animations to draw from, in registry order.

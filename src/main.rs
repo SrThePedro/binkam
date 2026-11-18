@@ -37,6 +37,13 @@ fn main() -> color_eyre::Result<()> {
         return Ok(());
     }
 
+    if cli.list_fonts {
+        for name in clock::font::Font::all_names() {
+            println!("{name}");
+        }
+        return Ok(());
+    }
+
     // Settings: the defaults, under the config file, under the command line.
     let config = Config::resolve(&cli)?;
 

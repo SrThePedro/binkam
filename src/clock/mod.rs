@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use crate::render::text_cols;
-use font::{GLYPH_GAP, GLYPH_HEIGHT};
+use font::{Font, GLYPH_GAP};
 
 /// Turkish month names, indexed by [`Datelike::month0`].
 const MONTHS: [&str; 12] = [
@@ -84,9 +84,6 @@ impl HourFormat {
     }
 }
 
-/// Rows taken by clock, gap and date line together.
-const FULL_HEIGHT: u16 = GLYPH_HEIGHT + DATE_GAP + 1;
-
 /// Where the clock ends up inside a given area, decided once and then used
 /// both for drawing and for darkening the background behind it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +94,9 @@ enum Placement {
         clock: Rect,
         date: Option<Rect>,
         seconds: bool,
+        /// Size multiplier the glyphs ended up being drawn at, which is the
+        /// one that was asked for unless it had to shrink to fit.
+        scale: u8,
     },
     /// Plain text fallback; `seconds` is false once only `HH:MM` fits.
     Small { rect: Rect, seconds: bool },
@@ -144,6 +144,10 @@ pub struct ClockWidget {
     show_date: bool,
     /// Whether the hours run 0 to 23 or 1 to 12.
     hour_format: HourFormat,
+    /// The glyphs the big clock is drawn with.
+    font: &'static Font,
+    /// How many cells wide and tall one glyph pixel becomes.
+    scale: u8,
     /// Colour of the digits.
     pub digit_color: Color,
     /// Colour of the date line.
@@ -160,6 +164,8 @@ impl Default for ClockWidget {
             show_seconds: true,
             show_date: true,
             hour_format: HourFormat::default(),
+            font: Font::fallback(),
+            scale: 1,
             digit_color: Color::White,
             date_color: Color::Gray,
         }
@@ -185,6 +191,26 @@ impl ClockWidget {
         // Any cached date line was built for the old settings.
         self.date_shown = None;
         self
+    }
+
+    /// Choose the glyphs and how big to draw them.
+    ///
+    /// A size the terminal cannot fit is not an error: [`Self::placement`]
+    /// works its way back down to one that fits.
+    pub fn with_font(mut self, font: &'static Font, scale: u8) -> Self {
+        self.font = font;
+        self.scale = font::clamp_scale(scale);
+        self
+    }
+
+    /// The glyphs currently in use.
+    pub fn font(&self) -> &'static Font {
+        self.font
+    }
+
+    /// The size multiplier currently asked for.
+    pub fn scale(&self) -> u8 {
+        self.scale
     }
 
     /// Point the clock at `now`, rebuilding the cached strings as needed.
@@ -244,8 +270,11 @@ impl ClockWidget {
 
     /// Smallest area the big clock needs, date line included.
     pub fn preferred_size(&self) -> (u16, u16) {
-        let width = font::text_width(&self.time_text).max(text_cols(&self.date_text));
-        (width, FULL_HEIGHT)
+        let width = self
+            .font
+            .text_width(&self.time_text, self.scale)
+            .max(text_cols(&self.date_text));
+        (width, self.font.scaled_height(self.scale) + DATE_GAP + 1)
     }
 
     /// The time as shown, with or without its seconds.
@@ -263,39 +292,52 @@ impl ClockWidget {
     }
 
     /// Draw the block digits with their top-left corner at `(x, y)`.
-    fn render_big(&self, text: &str, x: u16, y: u16, area: Rect, buf: &mut Buffer) {
+    ///
+    /// At `scale` 1 one glyph pixel is one cell; above that it becomes a
+    /// `scale` by `scale` square of them.
+    fn render_big(&self, text: &str, x: u16, y: u16, scale: u8, area: Rect, buf: &mut Buffer) {
         let style = Style::new().fg(self.digit_color);
+        let scale = u16::from(scale);
         let mut cursor = x;
 
         for ch in text.chars() {
-            let Some(glyph) = font::glyph(ch) else {
+            let Some(glyph) = self.font.glyph(ch) else {
                 continue;
             };
 
             // The colon keeps its width while dark, so the digits never shift.
             if ch != ':' || self.colon_visible {
                 for (row, line) in glyph.iter().enumerate() {
-                    // row < GLYPH_HEIGHT and col < 6, so these casts are exact.
-                    let py = y.saturating_add(row as u16);
-                    if py >= area.bottom() {
+                    // A glyph is a handful of rows and columns, so these casts
+                    // are exact.
+                    let top = y.saturating_add((row as u16).saturating_mul(scale));
+                    if top >= area.bottom() {
                         break;
                     }
                     for (col, pixel) in line.chars().enumerate() {
                         if pixel == ' ' {
                             continue; // transparent: leave the background alone
                         }
-                        let px = cursor.saturating_add(col as u16);
-                        if px >= area.right() {
+                        let left = cursor.saturating_add((col as u16).saturating_mul(scale));
+                        if left >= area.right() {
                             break;
                         }
-                        if let Some(cell) = buf.cell_mut((px, py)) {
-                            cell.set_char(pixel).set_style(style);
+                        for py in top..top.saturating_add(scale).min(area.bottom()) {
+                            for px in left..left.saturating_add(scale).min(area.right()) {
+                                if let Some(cell) = buf.cell_mut((px, py)) {
+                                    cell.set_char(pixel).set_style(style);
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            cursor = cursor.saturating_add(font::glyph_width(glyph).saturating_add(GLYPH_GAP));
+            cursor = cursor.saturating_add(
+                font::glyph_width(glyph)
+                    .saturating_add(GLYPH_GAP)
+                    .saturating_mul(scale),
+            );
         }
     }
 
@@ -307,44 +349,45 @@ impl ClockWidget {
 
         let date_width = text_cols(&self.date_text);
 
-        // Prefer the full time in the block font; if it is too wide, try
-        // again without the seconds before falling back to plain text.
-        let wide = font::text_width(self.time_slice(true));
-        let narrow = font::text_width(self.time_slice(false));
-        let big = if area.width >= wide {
-            Some((wide, true))
-        } else if area.width >= narrow {
-            Some((narrow, false))
-        } else {
-            None
-        };
+        // Biggest first: the size that was asked for, then that size without
+        // the seconds, then one size smaller, and so on. An explicit size is
+        // a deliberate choice, so the seconds are given up before it is.
+        for scale in (1..=font::clamp_scale(self.scale)).rev() {
+            let clock_height = self.font.scaled_height(scale);
+            if area.height < clock_height {
+                continue;
+            }
+            for seconds in [true, false] {
+                let clock_width = self.font.text_width(self.time_slice(seconds), scale);
+                if clock_width == 0 || area.width < clock_width {
+                    continue;
+                }
 
-        if let Some((clock_width, seconds)) = big
-            && clock_width > 0
-            && area.height >= GLYPH_HEIGHT
-        {
-            let with_date =
-                date_width > 0 && area.height >= FULL_HEIGHT && area.width >= date_width;
-            let height = if with_date { FULL_HEIGHT } else { GLYPH_HEIGHT };
-            let top = area.y + (area.height - height) / 2;
+                let full_height = clock_height.saturating_add(DATE_GAP + 1);
+                let with_date =
+                    date_width > 0 && area.height >= full_height && area.width >= date_width;
+                let height = if with_date { full_height } else { clock_height };
+                let top = area.y + (area.height - height) / 2;
 
-            return Placement::Big {
-                clock: Rect::new(
-                    area.x + (area.width - clock_width) / 2,
-                    top,
-                    clock_width,
-                    GLYPH_HEIGHT,
-                ),
-                date: with_date.then(|| {
-                    Rect::new(
-                        area.x + (area.width - date_width) / 2,
-                        top + GLYPH_HEIGHT + DATE_GAP,
-                        date_width,
-                        1,
-                    )
-                }),
-                seconds,
-            };
+                return Placement::Big {
+                    clock: Rect::new(
+                        area.x + (area.width - clock_width) / 2,
+                        top,
+                        clock_width,
+                        clock_height,
+                    ),
+                    date: with_date.then(|| {
+                        Rect::new(
+                            area.x + (area.width - date_width) / 2,
+                            top + clock_height + DATE_GAP,
+                            date_width,
+                            1,
+                        )
+                    }),
+                    seconds,
+                    scale,
+                };
+            }
         }
 
         // Too small for the block font: drop the seconds, then give up.
@@ -397,8 +440,9 @@ impl Widget for &ClockWidget {
                 clock,
                 date,
                 seconds,
+                scale,
             } => {
-                self.render_big(self.time_slice(seconds), clock.x, clock.y, area, buf);
+                self.render_big(self.time_slice(seconds), clock.x, clock.y, scale, area, buf);
                 if let Some(date) = date {
                     buf.set_string(
                         date.x,
@@ -629,8 +673,8 @@ mod tests {
     fn the_block_font_drops_seconds_before_giving_up() {
         let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
         // 47 columns for HH:MM:SS, 30 for HH:MM.
-        assert_eq!(font::text_width("12:34:56"), 47);
-        assert_eq!(font::text_width("12:34"), 30);
+        assert_eq!(clock.font().text_width("12:34:56", 1), 47);
+        assert_eq!(clock.font().text_width("12:34", 1), 30);
 
         let wide = rows(&clock, 47, 5).join("\n");
         assert!(wide.contains('█'));
@@ -682,5 +726,105 @@ mod tests {
     fn preferred_size_covers_clock_and_date() {
         let clock = clock_at(at(2026, 11, 15, 12, 34, 56, 0));
         assert_eq!(clock.preferred_size(), (47, 7));
+    }
+
+    /// The same clock drawn with a named font at a given size.
+    fn clock_with(name: &str, scale: u8) -> ClockWidget {
+        let mut clock = ClockWidget::new().with_font(Font::by_name(name).unwrap(), scale);
+        clock.update_time(at(2026, 11, 15, 12, 34, 56, 0));
+        clock
+    }
+
+    #[test]
+    fn every_font_draws_the_time_when_it_fits() {
+        for name in Font::all_names() {
+            let clock = clock_with(name, 1);
+            let font = Font::by_name(name).unwrap();
+            let width = font.text_width("12:34:56", 1);
+            let text = rows(&clock, width, font.height() + 2).join("\n");
+            assert!(text.contains('█'), "{name} drew no digits:\n{text}");
+        }
+    }
+
+    #[test]
+    fn a_bigger_size_takes_more_room() {
+        let one = clock_with("block", 1);
+        let two = clock_with("block", 2);
+        let area = Rect::new(0, 0, 200, 60);
+        let (narrow, short) = one.measure(area);
+        let (wide, tall) = two.measure(area);
+        assert_eq!(wide, narrow * 2, "the width should double");
+        // The date line below it is one row either way, so the height grows
+        // by the height of the glyphs alone.
+        assert_eq!(tall - short, one.font().height());
+    }
+
+    #[test]
+    fn an_oversized_clock_shrinks_until_it_fits() {
+        // 4x block needs 188 columns; this terminal has 80.
+        let clock = clock_with("block", 4);
+        let area = Rect::new(0, 0, 80, 24);
+        let (width, height) = clock.measure(area);
+        assert!(width <= 80 && height <= 24, "{width}x{height} does not fit");
+        let text = rows(&clock, 80, 24).join("\n");
+        assert!(text.contains('█'), "gave up on the block font entirely");
+    }
+
+    #[test]
+    fn the_size_asked_for_is_remembered_even_when_it_cannot_be_drawn() {
+        let clock = clock_with("block", 4);
+        assert_eq!(clock.scale(), 4);
+        // Shrinking to fit is a drawing decision, not a change of settings.
+        let _ = clock.measure(Rect::new(0, 0, 80, 24));
+        assert_eq!(clock.scale(), 4);
+    }
+
+    #[test]
+    fn an_impossible_size_is_clamped_rather_than_refused() {
+        assert_eq!(clock_with("block", 0).scale(), 1);
+        assert_eq!(clock_with("block", 250).scale(), font::MAX_SCALE);
+    }
+
+    #[test]
+    fn slim_fits_a_terminal_that_block_cannot() {
+        // 33 columns for slim against 47 for block.
+        let area = Rect::new(0, 0, 36, 7);
+        let slim = clock_with("slim", 1);
+        let block = clock_with("block", 1);
+        assert_eq!(
+            slim.measure(area).0,
+            33,
+            "slim should still have room for the seconds"
+        );
+        assert_eq!(
+            block.measure(area).0,
+            30,
+            "block should have dropped its seconds"
+        );
+        assert!(
+            rows(&slim, area.width, area.height)
+                .join("\n")
+                .contains('█'),
+            "slim drew no digits"
+        );
+    }
+
+    #[test]
+    fn every_font_and_size_survives_every_awkward_area() {
+        for name in Font::all_names() {
+            for scale in 1..=font::MAX_SCALE {
+                let clock = clock_with(name, scale);
+                for (width, height) in [(1, 1), (3, 2), (6, 5), (20, 5), (47, 5), (80, 24)] {
+                    let lines = rows(&clock, width, height);
+                    assert_eq!(lines.len(), usize::from(height), "{name} {scale}x");
+                    assert!(
+                        lines
+                            .iter()
+                            .all(|l| l.chars().count() == usize::from(width)),
+                        "{name} at {scale}x drew a ragged frame on {width}x{height}"
+                    );
+                }
+            }
+        }
     }
 }

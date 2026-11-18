@@ -152,11 +152,9 @@ impl App {
         let theme = Theme::by_name(theme_names[theme_index])
             .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", config.theme))?;
 
-        let mut clock = ClockWidget::new().with_format(
-            config.show_seconds,
-            config.show_date,
-            config.hour_format(),
-        );
+        let mut clock = ClockWidget::new()
+            .with_format(config.show_seconds, config.show_date, config.hour_format())
+            .with_font(config.clock_font(), config.clock_scale);
         clock.digit_color = theme.clock_color();
         clock.date_color = theme.date_color();
         // Give the clock a time straight away, so its size can be measured on

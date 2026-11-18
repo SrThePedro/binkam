@@ -45,6 +45,24 @@ pub struct Cli {
     )]
     pub clock_position: Option<String>,
 
+    /// Glyphs the big clock is drawn with.
+    #[arg(
+        long,
+        value_name = "FONT",
+        value_parser = clap::builder::PossibleValuesParser::new(
+            crate::clock::font::Font::all_names(),
+        ),
+    )]
+    pub clock_font: Option<String>,
+
+    /// How big to draw the clock: 1 is the font's own size.
+    #[arg(
+        long,
+        value_name = "N",
+        value_parser = clap::value_parser!(u8).range(1..=i64::from(crate::clock::font::MAX_SCALE)),
+    )]
+    pub clock_scale: Option<u8>,
+
     /// Show the seconds as part of the time.
     #[arg(long, num_args = 0..=1, default_missing_value = "true", value_name = "BOOL")]
     pub show_seconds: Option<bool>,
@@ -109,6 +127,10 @@ pub struct Cli {
     /// List the available colour themes and exit.
     #[arg(long)]
     pub list_themes: bool,
+
+    /// List the available clock fonts and exit.
+    #[arg(long)]
+    pub list_fonts: bool,
 
     /// Time this many frames off screen, report the cost and exit.
     ///
