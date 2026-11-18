@@ -395,8 +395,8 @@ impl App {
 
         // Measure the clock every frame: its size changes with the terminal
         // and, at midnight, with the length of the date line.
-        self.motion
-            .set_bounds(self.area, self.clock.measure(self.area));
+        let area = self.clock_area();
+        self.motion.set_bounds(area, self.clock.measure(area));
         self.motion.update(dt);
         if self.motion.position() == ClockPosition::Bounce {
             // A DVD logo picks a new colour every time it hits an edge.
@@ -415,6 +415,21 @@ impl App {
         self.animation.update(dt);
         self.notice_left = self.notice_left.saturating_sub(dt);
         self.update_fps(dt);
+    }
+
+    /// The part of the screen the clock may use.
+    ///
+    /// In the settings mode the bottom row belongs to the key bar, so the
+    /// clock is kept out of it rather than being drawn over.
+    fn clock_area(&self) -> Rect {
+        if self.mode == Mode::Settings && self.area.height > 1 {
+            Rect {
+                height: self.area.height - 1,
+                ..self.area
+            }
+        } else {
+            self.area
+        }
     }
 
     /// Keep the smoothed frame rate and its pre-rendered text up to date.
@@ -767,6 +782,16 @@ mod tests {
             .any(|arg| *arg == "--color" || *arg == "--no-color");
         if !picks_colour {
             full.extend_from_slice(&["--color", "truecolor"]);
+        }
+        // Saving is a key press away, so every test is pointed at a
+        // throwaway file. Without this, a test that presses Enter would
+        // write the config file of whoever is running the suite.
+        let scratch = crate::config::scratch_config();
+        if !args.contains(&"--config") {
+            full.extend_from_slice(&[
+                "--config",
+                scratch.to_str().expect("a utf-8 temporary path"),
+            ]);
         }
         full.extend_from_slice(args);
         let cli = Cli::parse_from(full);
@@ -1368,6 +1393,36 @@ mod tests {
             "a screensaver should be bare: {:?}",
             rows[23]
         );
+    }
+
+    #[test]
+    fn the_key_bar_has_the_bottom_row_to_itself() {
+        // On a short terminal the date line used to land exactly where the
+        // bar goes, and the bar was drawn straight over it.
+        for (width, height) in [(40, 8), (47, 7), (60, 9), (80, 24)] {
+            let mut app = settings();
+            let rows = frame(&mut app, width, height);
+            let clock = app.motion.rect();
+            assert!(
+                clock.bottom() < height,
+                "the clock reached the bar's row at {width}x{height}"
+            );
+
+            let bar = app.key_bar.text(width).expect("a bar should fit this");
+            let bottom = &rows[usize::from(height) - 1];
+            assert!(
+                bottom.contains(bar),
+                "the bar is not intact at {width}x{height}: {bottom:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_screensaver_keeps_the_whole_screen() {
+        // Nothing is reserved without the bar, so the clock may use it all.
+        let mut app = app_from(&["--lock", "--anim", "starfield", "--seed", "1"]);
+        let _ = frame(&mut app, 40, 8);
+        assert_eq!(app.clock_area(), Rect::new(0, 0, 40, 8));
     }
 
     #[test]

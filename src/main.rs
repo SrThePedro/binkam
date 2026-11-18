@@ -65,7 +65,15 @@ fn main() -> color_eyre::Result<()> {
     // installs a panic hook that restores the terminal before printing.
     let terminal = ratatui::init();
     guard_mouse_capture();
-    let result = start_mouse_capture()
+    // The mouse is only worth capturing for a screensaver, where reaching for
+    // it means someone is back at the machine. In the settings mode it would
+    // take the terminal's own selection and scrolling away for nothing.
+    let watch_mouse = if cli.lock {
+        start_mouse_capture()
+    } else {
+        Ok(())
+    };
+    let result = watch_mouse
         .and_then(|()| App::new(&cli, &config))
         .and_then(|app| app.run(terminal));
 

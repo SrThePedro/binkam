@@ -343,6 +343,19 @@ pub fn scratch_path(name: &str) -> PathBuf {
     ))
 }
 
+/// A throwaway config path for the tests to save to.
+///
+/// One per process, shared by every test: a test that presses Enter on a list
+/// must never be able to reach the real config file of whoever is running the
+/// suite. Nothing reads it back, so two tests writing it cannot clash.
+#[cfg(test)]
+pub fn scratch_config() -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "binkam-test-{}/app-config.toml",
+        std::process::id()
+    ))
+}
+
 /// Accept either one animation name or a list of them.
 fn animation_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
