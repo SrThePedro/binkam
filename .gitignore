@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
-.claude/settings.local.json
+
+# Local development instructions and agent skills; not part of the project.
+/CLAUDE.md
+/.claude/

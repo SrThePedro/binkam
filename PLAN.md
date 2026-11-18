@@ -41,7 +41,7 @@ Amaç: Ortada okunaklı, büyük bir dijital saat.
 ## Faz 2 — Animasyon çatısı + ilk animasyon
 Amaç: Genişletilebilir yapı ve saatin arkasında hareket.
 
-- [x] `anim/mod.rs`: `Animation` trait'i (bkz. CLAUDE.md), `by_name`, `all_names`
+- [x] `anim/mod.rs`: `Animation` trait'i (`resize` / `update` / `render`), `by_name`, `all_names`
 - [x] `render.rs`: half-block piksel yardımcısı (`▀` ile hücre başına 2 dikey piksel),
       renk lerp fonksiyonu
 - [x] `starfield.rs`: merkezden dışa akan 3D yıldız alanı, uzaklığa göre parlaklık
