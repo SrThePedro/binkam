@@ -102,6 +102,35 @@ impl Config {
         ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.config_dir().join(FILE_NAME))
     }
 
+    /// Where a change made in the settings menu should be written.
+    ///
+    /// A file named on the command line is the one to update; otherwise it is
+    /// the usual place, whether or not anything is there yet.
+    pub fn save_path(cli: &Cli) -> Option<PathBuf> {
+        match cli.config.as_deref() {
+            Some(path) => Some(PathBuf::from(path)),
+            None => Self::default_path(),
+        }
+    }
+
+    /// Write these settings out as TOML, creating the directory if needed.
+    ///
+    /// The seed is left out on purpose. It pins the randomness, which is a
+    /// debugging aid rather than a preference, and a saved one would give
+    /// every later run the same picture.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .wrap_err_with(|| format!("could not create {}", parent.display()))?;
+        }
+        let text = Self {
+            seed: None,
+            ..self.clone()
+        }
+        .to_toml()?;
+        fs::write(path, text).wrap_err_with(|| format!("could not write {}", path.display()))
+    }
+
     /// Read and parse one config file.
     pub fn from_file(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
@@ -296,6 +325,22 @@ impl Config {
     pub fn to_toml(&self) -> Result<String> {
         toml::to_string_pretty(self).wrap_err("could not render the settings as TOML")
     }
+}
+
+/// A path under the system temporary directory that nothing else uses.
+///
+/// Tests run as threads of one process, so the counter is enough to keep two
+/// of them apart, and the process id keeps two runs apart.
+#[cfg(test)]
+pub fn scratch_path(name: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "binkam-test-{}-{unique}/{name}",
+        std::process::id()
+    ))
 }
 
 /// Accept either one animation name or a list of them.
@@ -652,5 +697,73 @@ mod tests {
             path.components().any(|part| part.as_os_str() == APP_NAME),
             "{path:?} should be somewhere under {APP_NAME}"
         );
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::{Config, scratch_path};
+    use crate::cli::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn saving_and_reading_back_gives_the_same_settings() {
+        let path = scratch_path("config.toml");
+        let settings = Config {
+            theme: "nord".to_owned(),
+            clock_font: "tall".to_owned(),
+            clock_scale: 3,
+            fps: 60,
+            show_seconds: false,
+            anim: vec!["fire".to_owned(), "snow".to_owned()],
+            ..Config::default()
+        };
+
+        settings.save(&path).expect("the directory should be made");
+        let read_back = Config::from_file(&path).expect("what we wrote should parse");
+        assert_eq!(read_back, settings);
+
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn saving_creates_the_directory_it_needs() {
+        let path = scratch_path("nested/deeper/config.toml");
+        assert!(!path.exists());
+        Config::default().save(&path).unwrap();
+        assert!(path.is_file(), "{path:?} was not written");
+
+        let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn a_saved_file_never_pins_the_randomness() {
+        let path = scratch_path("config.toml");
+        let settings = Config {
+            seed: Some(1234),
+            ..Config::default()
+        };
+        settings.save(&path).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("seed"), "the seed was saved: {text}");
+        assert_eq!(Config::from_file(&path).unwrap().seed, None);
+
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_file_named_on_the_command_line_is_the_one_saved_to() {
+        let cli = Cli::parse_from(["binkam", "--config", "/tmp/elsewhere.toml"]);
+        assert_eq!(
+            Config::save_path(&cli).unwrap().to_str(),
+            Some("/tmp/elsewhere.toml")
+        );
+    }
+
+    #[test]
+    fn without_one_the_usual_place_is_saved_to() {
+        let cli = Cli::parse_from(["binkam"]);
+        assert_eq!(Config::save_path(&cli), Config::default_path());
     }
 }

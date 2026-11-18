@@ -2,6 +2,7 @@
 
 use std::{
     fmt::Write as _,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -27,6 +28,7 @@ use crate::{
     },
     color::{self, ColorDepth},
     config::Config,
+    menu::{self, KeyBar, Menu, Setting},
     render,
     theme::Theme,
 };
@@ -62,8 +64,18 @@ const BENCH_WARMUP_FRAMES: u32 = 200;
 /// How long a change of animation takes, from lit through black and back.
 const TRANSITION: Duration = Duration::from_millis(900);
 
-/// Key reminder shown along the bottom in preview mode.
-const PREVIEW_HINT: &str = "n/p animation · t theme · c position · q quit";
+/// How long a message such as "saved" stays on screen.
+const NOTICE_TIME: Duration = Duration::from_millis(2500);
+
+/// What a key press means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The default: the keys along the bottom open settings lists, and a
+    /// change is written back to the config file.
+    Settings,
+    /// A plain screensaver: any key or mouse movement quits.
+    Lock,
+}
 
 /// A change from one animation to the next, fading out and back in.
 struct Transition {
@@ -110,10 +122,25 @@ pub struct App {
     since_switch: Duration,
     /// The fade in progress, if any.
     transition: Option<Transition>,
-    /// Index of the running theme in `Theme::all_names`.
-    theme_index: usize,
-    /// Whether keys browse the combinations instead of quitting.
-    preview: bool,
+    /// Everything the file and the command line agreed on, kept live so a
+    /// change can be written straight back out.
+    settings: Config,
+    /// Where a change is saved, or `None` on a platform with nowhere to put
+    /// it.
+    config_path: Option<PathBuf>,
+    /// Whether keys change settings or simply end the screensaver.
+    mode: Mode,
+    /// The list currently open, if any.
+    menu: Option<Menu>,
+    /// The key reminder along the bottom.
+    key_bar: KeyBar,
+    /// A short message under the key bar, such as "ayarlar kaydedildi".
+    notice: String,
+    /// How long that message has left.
+    notice_left: Duration,
+    /// Whether the animation may change on its own; `--preview` turns this
+    /// off so browsing is not interrupted.
+    auto_cycle: bool,
     /// Whether to draw the status and frames-per-second readout.
     show_fps: bool,
     /// Smoothed frames per second, once there has been a frame to measure.
@@ -144,52 +171,117 @@ impl App {
         let animation = crate::anim::by_name(anim_pool[anim_index], rng.random::<u64>())
             .ok_or_else(|| eyre!("unknown animation `{}`; try --list", anim_pool[anim_index]))?;
 
-        let theme_names = Theme::all_names();
-        let theme_index = theme_names
-            .iter()
-            .position(|known| *known == config.theme)
-            .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", config.theme))?;
-        let theme = Theme::by_name(theme_names[theme_index])
+        let theme = Theme::by_name(&config.theme)
             .ok_or_else(|| eyre!("unknown theme `{}`; try --list-themes", config.theme))?;
 
-        let mut clock = ClockWidget::new()
-            .with_format(config.show_seconds, config.show_date, config.hour_format())
-            .with_font(config.clock_font(), config.clock_scale);
-        clock.digit_color = theme.clock_color();
-        clock.date_color = theme.date_color();
-        // Give the clock a time straight away, so its size can be measured on
-        // the very first frame instead of coming out empty.
-        clock.update_time(Local::now().naive_local());
-
-        Ok(Self {
+        let mut app = Self {
             running: true,
             frame_time: config.frame_time(),
             uptime: Duration::ZERO,
-            clock,
+            clock: ClockWidget::new(),
             motion: ClockMotion::new(config.clock_position()),
             animation,
             area: Rect::ZERO,
             rng,
             anim_pool,
             anim_index,
-            // Browsing by hand and changing on a timer would fight.
-            cycle_interval: if cli.preview {
-                None
-            } else {
-                config.cycle_interval()
-            },
+            cycle_interval: None,
             since_switch: Duration::ZERO,
             transition: None,
             theme,
             color: config.color_setting().resolve(),
-            theme_index,
-            preview: cli.preview,
             backdrop: config.clock_backdrop,
+            settings: config.clone(),
+            config_path: Config::save_path(cli),
+            mode: if cli.lock { Mode::Lock } else { Mode::Settings },
+            menu: None,
+            key_bar: KeyBar::new(),
+            notice: String::new(),
+            notice_left: Duration::ZERO,
+            // Browsing by hand and changing on a timer would fight.
+            auto_cycle: !cli.preview,
             // Preview mode needs the readout to say what is on screen.
             show_fps: cli.show_fps || cli.preview,
             fps: None,
-            fps_text: String::with_capacity(32),
-        })
+            fps_text: String::with_capacity(48),
+        };
+
+        // Everything derived from the settings is built in one place, so that
+        // starting up and changing a setting later cannot drift apart.
+        app.apply_settings();
+        Ok(app)
+    }
+
+    /// Rebuild everything that is derived from [`Self::settings`].
+    ///
+    /// Called once at startup and again after every change, so a setting
+    /// only ever has to be written to `settings`.
+    fn apply_settings(&mut self) {
+        self.frame_time = self.settings.frame_time();
+        self.color = self.settings.color_setting().resolve();
+        self.backdrop = self.settings.clock_backdrop;
+
+        // The clock caches the strings it draws, so changing what it shows
+        // means building it again rather than poking at it.
+        self.clock = ClockWidget::new()
+            .with_format(
+                self.settings.show_seconds,
+                self.settings.show_date,
+                self.settings.hour_format(),
+            )
+            .with_font(self.settings.clock_font(), self.settings.clock_scale);
+        // Give it a time straight away, so its size can be measured on this
+        // very frame instead of coming out empty.
+        self.clock.update_time(Local::now().naive_local());
+
+        if let Some(theme) = Theme::by_name(&self.settings.theme) {
+            self.theme = theme;
+        }
+        let position = self.settings.clock_position();
+        if position != self.motion.position() {
+            self.motion.set_position(position);
+        }
+        self.clock.date_color = self.theme.date_color();
+        if position == ClockPosition::Bounce {
+            // Bounce paints the digits itself, from the theme's accents.
+            self.clock.digit_color = self.theme.accent(self.motion.bounces());
+        } else {
+            self.clock.digit_color = self.theme.clock_color();
+        }
+
+        let pool = self.settings.animation_pool();
+        if !pool.is_empty() {
+            self.anim_pool = pool;
+            self.anim_index = self
+                .anim_pool
+                .iter()
+                .position(|name| *name == self.animation.name())
+                .unwrap_or(0);
+            if self.anim_pool[self.anim_index] != self.animation.name() {
+                // Browsing a list has to show the effect at once; a 900 ms
+                // fade would make the list feel broken.
+                self.set_animation_now(self.anim_index);
+            }
+        }
+        self.cycle_interval = if self.auto_cycle {
+            self.settings.cycle_interval()
+        } else {
+            None
+        };
+    }
+
+    /// Put the animation at `index` of the pool on screen without a fade.
+    fn set_animation_now(&mut self, index: usize) {
+        let index = index % self.anim_pool.len();
+        let Some(mut animation) = crate::anim::by_name(self.anim_pool[index], self.rng.random())
+        else {
+            return;
+        };
+        animation.resize(self.area);
+        self.animation = animation;
+        self.anim_index = index;
+        self.since_switch = Duration::ZERO;
+        self.transition = None;
     }
 
     /// Run the main loop until the user presses a key.
@@ -321,6 +413,7 @@ impl App {
         self.advance_transition(dt);
 
         self.animation.update(dt);
+        self.notice_left = self.notice_left.saturating_sub(dt);
         self.update_fps(dt);
     }
 
@@ -380,7 +473,14 @@ impl App {
 
         self.clock.render(clock_area, buf);
         self.render_fps(area, buf);
-        self.render_hint(area, buf);
+        if self.mode == Mode::Settings {
+            self.key_bar.render(area, buf);
+            self.render_notice(area, buf);
+            // Last of the overlays, so an open list sits on top of them all.
+            if let Some(menu) = self.menu.as_ref() {
+                menu.render(area, buf);
+            }
+        }
 
         // Last of all: everything above drew in truecolor, so this is the one
         // place that has to know what the terminal can take.
@@ -415,75 +515,151 @@ impl App {
             // Press counts, or the program would quit as it started.
             Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key.code),
             // Someone reaching for the mouse is someone back at the machine.
-            // In preview mode they are browsing, so it is left alone.
-            Event::Mouse(_) if !self.preview => self.running = false,
+            // In settings mode they are configuring, so it is left alone.
+            Event::Mouse(_) if self.mode == Mode::Lock => self.running = false,
             _ => {}
         }
     }
 
     /// React to a key press.
     fn handle_key(&mut self, code: KeyCode) {
-        if !self.preview {
+        // A screensaver gets out of the way; that is its whole job.
+        if self.mode == Mode::Lock {
             self.running = false;
+            return;
+        }
+        // An open list takes the keys first, so j, k and q mean something
+        // different while one is up.
+        if self.menu.is_some() {
+            self.handle_menu_key(code);
             return;
         }
 
         let count = self.anim_pool.len();
         match code {
             KeyCode::Char('q' | 'Q') | KeyCode::Esc => self.running = false,
+            KeyCode::Char('?') => self.menu = Some(Menu::help(self.area)),
             KeyCode::Char('n' | 'N') | KeyCode::Right => self.start_switch(self.anim_index + 1),
             KeyCode::Char('p' | 'P') | KeyCode::Left => {
                 self.start_switch(self.anim_index + count - 1);
             }
-            KeyCode::Char('t' | 'T') => self.next_theme(),
-            KeyCode::Char('c' | 'C') => self.next_clock_position(),
+            // Anything else is either a settings key or nothing at all.
+            // Unlike the screensaver, a stray key must not quit: losing what
+            // you were setting up to a mistyped letter would be rude.
+            KeyCode::Char(key) => {
+                if let Some(setting) = Setting::from_key(key.to_ascii_lowercase()) {
+                    self.open_menu(setting);
+                }
+            }
             _ => {}
         }
     }
 
-    /// Move on to the next theme in the list.
-    fn next_theme(&mut self) {
-        let names = Theme::all_names();
-        self.theme_index = (self.theme_index + 1) % names.len();
-        if let Some(theme) = Theme::by_name(names[self.theme_index]) {
-            self.theme = theme;
-            self.clock.date_color = self.theme.date_color();
-            // Bounce paints the digits itself, from the new theme's accents.
-            if self.motion.position() != ClockPosition::Bounce {
-                self.clock.digit_color = self.theme.clock_color();
+    /// Open the list for `setting`, on the value in force.
+    fn open_menu(&mut self, setting: Setting) {
+        let (items, index) = menu::choices(setting, &self.settings);
+        self.menu = Some(Menu::new(setting, &items, index, self.area));
+    }
+
+    /// React to a key press while a list is open.
+    fn handle_menu_key(&mut self, code: KeyCode) {
+        let step = match code {
+            KeyCode::Up | KeyCode::Char('k' | 'K') => Some(-1),
+            KeyCode::Down | KeyCode::Char('j' | 'J') => Some(1),
+            _ => None,
+        };
+        if let Some(step) = step {
+            let area = self.area;
+            if let Some(menu) = self.menu.as_mut() {
+                menu.move_by(step, area);
             }
+            // Show the highlighted value at once: picking a theme by eye is
+            // the point of the list.
+            self.show_selected();
+            return;
+        }
+
+        match code {
+            KeyCode::Enter => self.commit_menu(),
+            KeyCode::Esc | KeyCode::Char('q' | 'Q') => self.cancel_menu(),
+            _ => {}
         }
     }
 
-    /// Move the clock on to the next position mode.
-    fn next_clock_position(&mut self) {
-        let names = ClockPosition::all_names();
-        let current = self.motion.position().name();
-        let index = names.iter().position(|name| *name == current).unwrap_or(0);
-        let Some(position) = ClockPosition::by_name(names[(index + 1) % names.len()]) else {
+    /// Apply whatever the open list has highlighted, without saving it.
+    fn show_selected(&mut self) {
+        // Owned, so the borrow of `self.menu` is over before `self` is
+        // handed out mutably again.
+        let picked = self.menu.as_ref().and_then(|menu| {
+            let setting = menu.setting()?;
+            Some((setting, menu.selected_value()?.to_owned()))
+        });
+        let Some((setting, value)) = picked else {
             return;
         };
+        menu::apply(setting, &value, &mut self.settings);
+        self.apply_settings();
+    }
 
-        self.motion.set_position(position);
-        if position != ClockPosition::Bounce {
-            // Take back the digit colour that bounce was cycling.
-            self.clock.digit_color = self.theme.clock_color();
+    /// Keep what the list has highlighted and write it to the config file.
+    fn commit_menu(&mut self) {
+        // Enter without having moved: nothing has been applied yet.
+        self.show_selected();
+        let changed = self.menu.take().and_then(|menu| menu.setting()).is_some();
+        if changed {
+            self.save_settings();
         }
     }
 
-    /// Draw the key reminder along the bottom, in preview mode only.
-    fn render_hint(&self, area: Rect, buf: &mut Buffer) {
-        if !self.preview || area.height == 0 {
+    /// Close the list and put back the value it opened on.
+    fn cancel_menu(&mut self) {
+        let Some(menu) = self.menu.take() else {
+            return;
+        };
+        if let (Some(setting), Some(value)) = (menu.setting(), menu.opened_value()) {
+            menu::apply(setting, value, &mut self.settings);
+        }
+        self.apply_settings();
+    }
+
+    /// Write the live settings out, and say on screen how it went.
+    fn save_settings(&mut self) {
+        let Some(path) = self.config_path.clone() else {
+            self.notify("ayar dosyası için bir yer bulunamadı".to_owned());
+            return;
+        };
+        match self.settings.save(&path) {
+            Ok(()) => self.notify("ayarlar kaydedildi".to_owned()),
+            // There is no stderr to complain to from inside the alternate
+            // screen, so the reason goes on screen.
+            Err(error) => self.notify(format!("kaydedilemedi: {error}")),
+        }
+    }
+
+    /// Put a message under the key bar for a few seconds.
+    fn notify(&mut self, text: String) {
+        self.notice = text;
+        self.notice_left = NOTICE_TIME;
+    }
+
+    /// Draw that message, while it lasts.
+    fn render_notice(&self, area: Rect, buf: &mut Buffer) {
+        if self.notice_left.is_zero() || area.height < 2 {
             return;
         }
-        let width = render::text_cols(PREVIEW_HINT);
-        if area.width < width {
+        let width = render::text_cols(&self.notice);
+        if width == 0 || area.width < width {
             return;
         }
         let x = area.x + (area.width - width) / 2;
-        let y = area.bottom() - 1;
+        let y = area.bottom() - 2;
         render::fade_to_black(buf, Rect::new(x, y, width, 1), OVERLAY_KEEP);
-        buf.set_string(x, y, PREVIEW_HINT, Style::new().fg(Color::DarkGray));
+        buf.set_string(
+            x,
+            y,
+            &self.notice,
+            Style::new().fg(self.theme.clock_color()),
+        );
     }
 }
 
@@ -602,6 +778,11 @@ mod tests {
         app_from(&[])
     }
 
+    /// A plain screensaver, which is what `--lock` asks for: any key quits.
+    fn locked() -> App {
+        app_from(&["--lock"])
+    }
+
     fn key(kind: KeyEventKind) -> Event {
         Event::Key(KeyEvent {
             code: KeyCode::Char('q'),
@@ -631,7 +812,7 @@ mod tests {
 
     #[test]
     fn key_press_stops_the_loop() {
-        let mut app = app();
+        let mut app = locked();
         app.update(GRACE_PERIOD);
         app.handle_event(&key(KeyEventKind::Press));
         assert!(!app.running);
@@ -639,7 +820,7 @@ mod tests {
 
     #[test]
     fn key_release_is_ignored() {
-        let mut app = app();
+        let mut app = locked();
         app.update(GRACE_PERIOD);
         app.handle_event(&key(KeyEventKind::Release));
         assert!(app.running, "Windows sends Release after every Press");
@@ -647,7 +828,7 @@ mod tests {
 
     #[test]
     fn events_during_grace_period_are_ignored() {
-        let mut app = app();
+        let mut app = locked();
         app.update(Duration::from_millis(100));
         app.handle_event(&key(KeyEventKind::Press));
         assert!(app.running);
@@ -664,7 +845,7 @@ mod tests {
 
     #[test]
     fn mouse_movement_quits() {
-        let mut app = app();
+        let mut app = locked();
         app.update(GRACE_PERIOD);
         app.handle_event(&mouse_moved());
         assert!(!app.running, "a screensaver should get out of the way");
@@ -672,22 +853,22 @@ mod tests {
 
     #[test]
     fn mouse_movement_during_the_grace_period_is_ignored() {
-        let mut app = app();
+        let mut app = locked();
         app.update(Duration::from_millis(100));
         app.handle_event(&mouse_moved());
         assert!(app.running);
     }
 
     #[test]
-    fn preview_ignores_the_mouse() {
+    fn the_settings_mode_ignores_the_mouse() {
         let mut app = preview();
         app.handle_event(&mouse_moved());
-        assert!(app.running, "browsing should not be interrupted");
+        assert!(app.running, "configuring should not be interrupted");
     }
 
     #[test]
     fn resize_does_not_quit() {
-        let mut app = app();
+        let mut app = locked();
         app.update(GRACE_PERIOD);
         app.handle_event(&Event::Resize(10, 5));
         assert!(app.running);
@@ -894,7 +1075,15 @@ mod tests {
         })
     }
 
-    /// An app in preview mode, past the grace period.
+    /// An app in the settings mode — the default — past the grace period.
+    fn settings() -> App {
+        let mut app = app_from(&["--anim", "starfield", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
+        app
+    }
+
+    /// The same, with `--preview`: the status readout and no timer.
     fn preview() -> App {
         let mut app = app_from(&["--preview", "--anim", "starfield", "--seed", "1"]);
         app.resize(Rect::new(0, 0, 80, 24));
@@ -902,27 +1091,63 @@ mod tests {
         app
     }
 
+    /// Which setting the open list changes, or `None` for the key help.
+    fn open_setting(app: &App) -> Option<Setting> {
+        app.menu.as_ref().and_then(Menu::setting)
+    }
+
     #[test]
-    fn preview_ignores_keys_that_mean_nothing() {
-        let mut app = preview();
-        for code in [KeyCode::Char('x'), KeyCode::Enter, KeyCode::Char(' ')] {
+    fn the_settings_mode_is_the_default_and_lock_turns_it_off() {
+        assert_eq!(app_from(&[]).mode, Mode::Settings);
+        assert_eq!(app_from(&["--preview"]).mode, Mode::Settings);
+        assert_eq!(app_from(&["--lock"]).mode, Mode::Lock);
+    }
+
+    #[test]
+    fn under_lock_every_key_quits() {
+        for code in [
+            KeyCode::Char('n'),
+            KeyCode::Char('t'),
+            KeyCode::Char('?'),
+            KeyCode::Enter,
+        ] {
+            let mut app = app_from(&["--lock", "--anim", "starfield"]);
+            app.update(GRACE_PERIOD);
             app.handle_event(&key_code(code));
-            assert!(app.running, "{code:?} should not quit in preview mode");
+            assert!(!app.running, "{code:?} should quit a screensaver");
         }
     }
 
     #[test]
-    fn preview_quits_on_q_and_escape() {
+    fn a_stray_key_does_not_quit_the_settings_mode() {
+        // Losing what you were setting up to a mistyped letter would be rude.
+        let mut app = settings();
+        for code in [
+            KeyCode::Char('x'),
+            KeyCode::Enter,
+            KeyCode::Char(' '),
+            KeyCode::Char('9'),
+        ] {
+            app.handle_event(&key_code(code));
+            assert!(app.running, "{code:?} should not quit");
+            assert!(app.menu.is_none(), "{code:?} should not open a list");
+        }
+    }
+
+    #[test]
+    fn the_settings_mode_quits_on_q_and_escape() {
         for code in [KeyCode::Char('q'), KeyCode::Char('Q'), KeyCode::Esc] {
-            let mut app = preview();
+            let mut app = settings();
             app.handle_event(&key_code(code));
             assert!(!app.running, "{code:?} should quit");
         }
     }
 
     #[test]
-    fn preview_steps_through_the_animations() {
-        let mut app = preview();
+    fn n_and_p_still_step_through_the_animations() {
+        let mut app = app_from(&["--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
         let names = app.anim_pool.clone();
         let start = app.anim_index;
 
@@ -939,40 +1164,167 @@ mod tests {
     }
 
     #[test]
-    fn preview_steps_through_the_themes() {
-        let names = Theme::all_names();
-        let mut app = preview();
-        let start = app.theme_index;
-
-        for step in 1..=names.len() {
-            app.handle_event(&key_code(KeyCode::Char('t')));
-            let expected = (start + step) % names.len();
-            assert_eq!(app.theme_index, expected);
-            assert_eq!(app.theme.name(), names[expected]);
+    fn every_setting_has_a_key_that_opens_its_list() {
+        for setting in Setting::ALL {
+            let mut app = settings();
+            app.handle_event(&key_code(KeyCode::Char(setting.key())));
+            assert_eq!(open_setting(&app), Some(setting), "{setting:?}");
         }
-        assert_eq!(app.theme_index, start, "the themes should wrap round");
     }
 
     #[test]
-    fn preview_steps_through_the_clock_positions() {
-        let names = ClockPosition::all_names();
-        let mut app = preview();
-        let start = app.motion.position().name();
-        let index = names.iter().position(|n| *n == start).unwrap();
+    fn browsing_the_theme_list_changes_the_theme_at_once() {
+        let mut app = settings();
+        let before = app.theme.name();
 
-        for step in 1..=names.len() {
-            app.handle_event(&key_code(KeyCode::Char('c')));
-            assert_eq!(
-                app.motion.position().name(),
-                names[(index + step) % names.len()]
-            );
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        app.handle_event(&key_code(KeyCode::Down));
+        assert_ne!(
+            app.theme.name(),
+            before,
+            "the theme did not follow the list"
+        );
+        assert_eq!(
+            app.settings.theme,
+            app.theme.name(),
+            "the settings and the screen disagree"
+        );
+        assert_eq!(app.clock.date_color, app.theme.date_color());
+    }
+
+    #[test]
+    fn escape_puts_back_the_value_the_list_opened_on() {
+        let mut app = settings();
+        let before = app.theme.name().to_owned();
+
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        app.handle_event(&key_code(KeyCode::Down));
+        app.handle_event(&key_code(KeyCode::Down));
+        app.handle_event(&key_code(KeyCode::Esc));
+
+        assert!(app.menu.is_none(), "Esc should close the list");
+        assert!(app.running, "Esc inside a list should not quit");
+        assert_eq!(app.theme.name(), before);
+        assert_eq!(app.settings.theme, before);
+    }
+
+    #[test]
+    fn q_closes_an_open_list_instead_of_quitting() {
+        let mut app = settings();
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        app.handle_event(&key_code(KeyCode::Char('q')));
+        assert!(
+            app.running,
+            "q should have closed the list, not the program"
+        );
+        assert!(app.menu.is_none());
+
+        // And again, with nothing open, it quits.
+        app.handle_event(&key_code(KeyCode::Char('q')));
+        assert!(!app.running);
+    }
+
+    #[test]
+    fn enter_keeps_the_choice_and_writes_it_to_the_file() {
+        let path = crate::config::scratch_path("config.toml");
+        let name = path.to_str().expect("a utf-8 temporary path");
+        let mut app = app_from(&["--config", name, "--anim", "starfield", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
+
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        app.handle_event(&key_code(KeyCode::Down));
+        let chosen = app.theme.name().to_owned();
+        app.handle_event(&key_code(KeyCode::Enter));
+
+        assert!(app.menu.is_none(), "Enter should close the list");
+        let saved = Config::from_file(&path).expect("Enter should have written a file");
+        assert_eq!(saved.theme, chosen, "the file disagrees with the screen");
+        assert!(
+            app.notice.contains("kaydedildi"),
+            "no word of the save: {:?}",
+            app.notice
+        );
+
+        let _ = std::fs::remove_dir_all(path.parent().expect("a parent directory"));
+    }
+
+    #[test]
+    fn browsing_alone_never_touches_the_file() {
+        let path = crate::config::scratch_path("config.toml");
+        let name = path.to_str().expect("a utf-8 temporary path");
+        let mut app = app_from(&["--config", name, "--anim", "starfield", "--seed", "1"]);
+        app.update(GRACE_PERIOD);
+
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        app.handle_event(&key_code(KeyCode::Down));
+        app.handle_event(&key_code(KeyCode::Esc));
+        assert!(!path.exists(), "{path:?} should not have been written");
+    }
+
+    #[test]
+    fn picking_an_animation_pins_it_and_shows_it_at_once() {
+        let mut app = settings();
+        assert_eq!(app.settings.anim, ["starfield"]);
+
+        app.handle_event(&key_code(KeyCode::Char('a')));
+        app.handle_event(&key_code(KeyCode::Down));
+
+        let name = app.animation.name();
+        assert_eq!(app.settings.anim, [name], "the choice was not pinned");
+        assert_ne!(name, "starfield", "nothing changed");
+        assert!(app.transition.is_none(), "browsing should not fade");
+        assert_eq!(app.cycle_interval, None, "a pinned animation cannot cycle");
+    }
+
+    #[test]
+    fn choosing_all_of_them_starts_the_timer_again() {
+        let mut app = settings();
+        assert_eq!(app.cycle_interval, None, "one animation cannot cycle");
+
+        app.handle_event(&key_code(KeyCode::Char('a')));
+        // The first row of the animation list is "all of them, in turn".
+        app.handle_event(&key_code(KeyCode::Up));
+        app.handle_event(&key_code(KeyCode::Down));
+        while app.settings.anim.len() == 1 {
+            app.handle_event(&key_code(KeyCode::Up));
         }
-        assert_eq!(app.motion.position().name(), start, "should wrap round");
+        assert!(app.settings.anim.is_empty());
+        assert_eq!(app.anim_pool.len(), crate::anim::all_names().len());
+        assert!(app.cycle_interval.is_some(), "the timer should be back");
+    }
+
+    #[test]
+    fn changing_the_clock_font_and_size_reaches_the_clock() {
+        let mut app = settings();
+        app.handle_event(&key_code(KeyCode::Char('f')));
+        app.handle_event(&key_code(KeyCode::Down));
+        assert_eq!(app.clock.font().name(), app.settings.clock_font);
+        assert_ne!(app.clock.font().name(), "block", "the font did not change");
+
+        app.handle_event(&key_code(KeyCode::Enter));
+        app.handle_event(&key_code(KeyCode::Char('b')));
+        app.handle_event(&key_code(KeyCode::Down));
+        assert_eq!(app.settings.clock_scale, 2);
+        assert_eq!(app.clock.scale(), 2);
+    }
+
+    #[test]
+    fn turning_the_seconds_off_shortens_the_time() {
+        let mut app = settings();
+        assert_eq!(app.clock.time_text().len(), 8, "HH:MM:SS to start with");
+
+        app.handle_event(&key_code(KeyCode::Char('s')));
+        // "açık" is the first row, so one step down is "kapalı".
+        app.handle_event(&key_code(KeyCode::Down));
+        app.update(Duration::from_millis(33));
+        assert!(!app.settings.show_seconds);
+        assert_eq!(app.clock.time_text().len(), 5, "HH:MM from now on");
     }
 
     #[test]
     fn leaving_bounce_restores_the_theme_colour() {
-        let mut app = app_from(&["--preview", "--clock-position", "bounce", "--seed", "1"]);
+        let mut app = app_from(&["--clock-position", "bounce", "--seed", "1"]);
         app.resize(Rect::new(0, 0, 80, 24));
         app.update(GRACE_PERIOD);
         // Run far enough to hit an edge and take an accent colour.
@@ -981,27 +1333,84 @@ mod tests {
         }
         assert!(app.motion.bounces() > 0, "never hit an edge");
 
-        app.handle_event(&key_code(KeyCode::Char('c')));
+        // `k` opens the position list, which opens on bounce; one down.
+        app.handle_event(&key_code(KeyCode::Char('k')));
+        app.handle_event(&key_code(KeyCode::Down));
         assert_ne!(app.motion.position(), ClockPosition::Bounce);
         assert_eq!(app.clock.digit_color, app.theme.clock_color());
     }
 
     #[test]
-    fn preview_shows_the_keys_and_the_status() {
+    fn the_help_key_opens_a_list_that_changes_nothing() {
+        let mut app = settings();
+        app.handle_event(&key_code(KeyCode::Char('?')));
+        assert!(app.menu.is_some(), "? opened nothing");
+        assert_eq!(open_setting(&app), None, "the help changes no setting");
+
+        let before = app.settings.clone();
+        app.handle_event(&key_code(KeyCode::Down));
+        assert_eq!(app.settings, before);
+        app.handle_event(&key_code(KeyCode::Enter));
+        assert!(app.menu.is_none(), "Enter should close the help");
+        assert_eq!(app.settings, before);
+    }
+
+    #[test]
+    fn the_key_bar_is_drawn_in_the_settings_mode_and_not_under_lock() {
+        let mut app = settings();
+        let rows = frame(&mut app, 80, 24);
+        assert!(rows[23].contains("q çık"), "no key bar: {:?}", rows[23]);
+
+        let mut bare = app_from(&["--lock", "--anim", "starfield", "--seed", "1"]);
+        let rows = frame(&mut bare, 80, 24);
+        assert!(
+            !rows[23].contains("çık"),
+            "a screensaver should be bare: {:?}",
+            rows[23]
+        );
+    }
+
+    #[test]
+    fn preview_shows_the_status_readout() {
         let mut app = preview();
         let rows = frame(&mut app, 80, 24);
-        assert!(rows[23].contains("q quit"), "no key hint: {:?}", rows[23]);
         assert!(rows[0].contains("starfield"), "no status: {:?}", rows[0]);
     }
 
     #[test]
-    fn outside_preview_every_key_still_quits() {
-        for code in [KeyCode::Char('n'), KeyCode::Char('t'), KeyCode::Enter] {
-            let mut app = app_from(&["--anim", "starfield"]);
-            app.update(GRACE_PERIOD);
-            app.handle_event(&key_code(code));
-            assert!(!app.running, "{code:?} should quit outside preview mode");
-        }
+    fn an_open_list_is_drawn_in_the_top_left_corner() {
+        let mut app = settings();
+        app.handle_event(&key_code(KeyCode::Char('t')));
+        let rows = frame(&mut app, 80, 24);
+
+        assert!(rows[1].starts_with(" ┌"), "no panel: {:?}", rows[1]);
+        assert!(rows[1].contains("Tema"), "no heading: {:?}", rows[1]);
+        assert!(
+            rows.iter().any(|row| row.contains('›')),
+            "nothing is highlighted"
+        );
+    }
+
+    #[test]
+    fn a_saved_setting_is_what_the_next_run_starts_from() {
+        let path = crate::config::scratch_path("config.toml");
+        let name = path.to_str().expect("a utf-8 temporary path");
+
+        let mut app = app_from(&["--config", name, "--anim", "starfield", "--seed", "1"]);
+        app.resize(Rect::new(0, 0, 80, 24));
+        app.update(GRACE_PERIOD);
+        app.handle_event(&key_code(KeyCode::Char('f')));
+        app.handle_event(&key_code(KeyCode::Down));
+        app.handle_event(&key_code(KeyCode::Enter));
+        let chosen = app.settings.clock_font.clone();
+
+        // What a second run would do: read the file, then start from it.
+        let cli = Cli::parse_from(["binkam", "--config", name, "--color", "truecolor"]);
+        let config = Config::resolve(&cli).expect("the saved file should be valid");
+        let next = App::new(&cli, &config).expect("and should start up");
+        assert_eq!(next.clock.font().name(), chosen);
+
+        let _ = std::fs::remove_dir_all(path.parent().expect("a parent directory"));
     }
 
     #[test]
@@ -1138,6 +1547,72 @@ mod tests {
             app.update(TRANSITION / 6);
             let rows = frame(&mut app, width, height);
             assert_eq!(rows.len(), usize::from(height));
+        }
+    }
+
+    #[test]
+    fn every_setting_list_survives_every_awkward_size() {
+        for setting in Setting::ALL {
+            let mut app = settings();
+            app.handle_event(&key_code(KeyCode::Char(setting.key())));
+            for (width, height) in AWKWARD_SIZES {
+                let rows = frame(&mut app, width, height);
+                assert_eq!(
+                    rows.len(),
+                    usize::from(height),
+                    "{setting:?} at {width}x{height}"
+                );
+                assert!(
+                    rows.iter()
+                        .all(|row| row.chars().count() == usize::from(width)),
+                    "{setting:?} drew a ragged frame at {width}x{height}"
+                );
+                // Move inside the list too: scrolling is worked out against
+                // whatever the screen is now.
+                app.handle_event(&key_code(KeyCode::Down));
+            }
+        }
+    }
+
+    #[test]
+    fn the_key_help_survives_every_awkward_size() {
+        let mut app = settings();
+        app.handle_event(&key_code(KeyCode::Char('?')));
+        for (width, height) in AWKWARD_SIZES {
+            let rows = frame(&mut app, width, height);
+            assert_eq!(rows.len(), usize::from(height), "{width}x{height}");
+            app.handle_event(&key_code(KeyCode::Down));
+        }
+    }
+
+    #[test]
+    fn every_clock_font_and_size_survives_every_awkward_size() {
+        for name in crate::clock::font::Font::all_names() {
+            for scale in ["1", "4"] {
+                let mut app = app_from(&[
+                    "--clock-font",
+                    name,
+                    "--clock-scale",
+                    scale,
+                    "--anim",
+                    "starfield",
+                    "--seed",
+                    "1",
+                ]);
+                for (width, height) in AWKWARD_SIZES {
+                    let rows = frame(&mut app, width, height);
+                    assert_eq!(
+                        rows.len(),
+                        usize::from(height),
+                        "{name} at {scale}x on {width}x{height}"
+                    );
+                    assert!(
+                        rows.iter()
+                            .all(|row| row.chars().count() == usize::from(width)),
+                        "{name} at {scale}x drew a ragged frame on {width}x{height}"
+                    );
+                }
+            }
         }
     }
 

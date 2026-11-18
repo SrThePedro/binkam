@@ -6,6 +6,7 @@ mod cli;
 mod clock;
 mod color;
 mod config;
+mod menu;
 mod render;
 mod theme;
 

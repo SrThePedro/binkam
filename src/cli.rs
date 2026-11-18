@@ -109,11 +109,18 @@ pub struct Cli {
     #[arg(long)]
     pub print_config: bool,
 
-    /// Browse animations and themes instead of quitting on a key press.
+    /// Run as a plain screensaver: any key or mouse movement quits.
     ///
-    /// n and p change animation, t the theme, c where the clock sits, and
-    /// q or Esc quits.
-    #[arg(long)]
+    /// This is the one to use from a lock or idle command, where the settings
+    /// keys would get in the way of simply dismissing the screen.
+    #[arg(long, short = 'l')]
+    pub lock: bool,
+
+    /// Settings mode with the status readout and no automatic changes.
+    ///
+    /// The settings mode is the default; this only adds the readout and stops
+    /// the animation changing on its own while you browse.
+    #[arg(long, conflicts_with = "lock")]
     pub preview: bool,
 
     /// Show a status and frames-per-second readout in the top right corner.
