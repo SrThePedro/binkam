@@ -58,17 +58,25 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
+      # The binary sits at the root of the archive, which is where
+      # `cargo binstall` looks for it. The licences travel with it because
+      # MIT asks for its notice to come along with every copy.
       - name: Package (Linux and macOS)
         if: runner.os != 'Windows'
         run: |
-          tar -czf binkam-${{ matrix.target }}.tar.gz \
-            -C target/${{ matrix.target }}/release ${{ matrix.binary }}
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+          cp LICENSE-MIT LICENSE-APACHE README.md dist/
+          tar -czf binkam-${{ matrix.target }}.tar.gz -C dist \
+            ${{ matrix.binary }} LICENSE-MIT LICENSE-APACHE README.md
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/${{ matrix.binary }} `
-            -DestinationPath binkam-${{ matrix.target }}.zip
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md dist/
+          Compress-Archive -Path dist/* -DestinationPath binkam-${{ matrix.target }}.zip
 
       - uses: actions/upload-artifact@v4
         with:
