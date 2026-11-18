@@ -1,0 +1,26 @@
+# Maintainer: SrThePedro <117118211+SrThePedro@users.noreply.github.com>
+# A prebuilt binary from the GitHub release: nothing to compile.
+
+pkgname=binkam-bin
+_pkgname=binkam
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="An animated, clock-centered terminal screensaver"
+arch=('x86_64' 'aarch64')
+url="https://github.com/SrThePedro/binkam"
+license=('MIT OR Apache-2.0')
+depends=('glibc' 'gcc-libs')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source_x86_64=("$_pkgname-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-x86_64-unknown-linux-gnu.tar.gz")
+source_aarch64=("$_pkgname-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-aarch64-unknown-linux-gnu.tar.gz")
+# Filled in from the release's own SHA256SUMS file.
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  install -Dm755 "$srcdir/$_pkgname" "$pkgdir/usr/bin/$_pkgname"
+  install -Dm644 "$srcdir/LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm644 "$srcdir/LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
