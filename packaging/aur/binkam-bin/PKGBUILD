@@ -14,9 +14,9 @@ provides=("$_pkgname")
 conflicts=("$_pkgname")
 source_x86_64=("$_pkgname-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-x86_64-unknown-linux-gnu.tar.gz")
 source_aarch64=("$_pkgname-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-aarch64-unknown-linux-gnu.tar.gz")
-# Filled in from the release's own SHA256SUMS file.
-sha256sums_x86_64=('SKIP')
-sha256sums_aarch64=('SKIP')
+# Taken from the release's own SHA256SUMS file.
+sha256sums_x86_64=('50cf02918d3be41e8c48429c6cee0d42e8d3ba8a07a606b4a4203044d6f93cc0')
+sha256sums_aarch64=('4a2ae260fd68b9b853c0cf680581795e77891f898132a9027570fd8ff51921df')
 
 package() {
   install -Dm755 "$srcdir/$_pkgname" "$pkgdir/usr/bin/$_pkgname"
