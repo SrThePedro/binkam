@@ -3,8 +3,10 @@
 [![CI](https://github.com/SrThePedro/binkam/actions/workflows/ci.yml/badge.svg)](https://github.com/SrThePedro/binkam/actions/workflows/ci.yml)
 
 An animated, clock-centered terminal screensaver. A big block-font clock sits on
-top of a changeable background effect; any key press puts the terminal back the
-way it was.
+top of a changeable background effect, and everything about it can be set from
+inside it: a key reminder sits along the bottom, each key opens a list, and the
+screen follows the highlighted line as you move through it. Choices are written
+back to the config file, so the next run starts where the last one left off.
 
 Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
 
@@ -41,15 +43,55 @@ binkam                                  # random animation, changing every few m
 binkam --anim fire                      # pin one animation
 binkam --anim fire --anim snow          # cycle between just these two
 binkam --theme nord --clock-position drift
-binkam --preview                        # browse the combinations
+binkam --clock-font tall --clock-scale 2
+binkam --lock                           # plain screensaver: any key quits
 binkam --list                           # list the animations
 binkam --list-themes                    # list the themes
+binkam --list-fonts                     # list the clock fonts
 binkam --print-config                   # print the settings this run would use
 ```
 
-Any key press or mouse movement quits, except in `--preview`, where `n` and `p`
-change animation, `t` changes theme, `c` moves the clock and `q` or `Esc`
-quits.
+Anything given on the command line only applies to that run; it is the config
+file, and the settings mode below, that stick.
+
+## Settings mode
+
+This is what plain `binkam` does. The keys along the bottom each open a list in
+the top left corner:
+
+| Key | Opens |
+| --- | --- |
+| `a` | Animation, or all of them in turn |
+| `t` | Theme |
+| `k` | Where the clock sits |
+| `f` | Clock font |
+| `b` | Clock size |
+| `s` | Seconds |
+| `d` | Date line |
+| `h` | 12 or 24 hour |
+| `r` | How much colour to use |
+| `g` | The darkening behind the clock |
+| `c` | How often the animation changes |
+| `z` | Frame rate |
+
+Inside a list, <kbd>↑</kbd> and <kbd>↓</kbd> (or <kbd>k</kbd> and <kbd>j</kbd>)
+move, and the screen follows at once — picking a theme by eye is the point.
+<kbd>Enter</kbd> keeps the highlighted line and writes it to the config file;
+<kbd>Esc</kbd> puts back whatever the list opened on.
+
+Outside a list, `n` and `p` change animation without opening one, `?` shows the
+whole list of keys, and `q` or <kbd>Esc</kbd> quits. A key that means nothing
+does nothing: a mistyped letter should not throw away what you were setting up.
+
+The bar shows as much as the terminal is wide enough for, down to `? tuşlar`
+alone, and `?` has the rest.
+
+### `--lock`
+
+`--lock` turns all of that off: no bar, no lists, and any key press or mouse
+movement quits. That is what a lock or idle command wants, and it is what the
+examples below use. It is also the only mode that captures the mouse, so in the
+settings mode the terminal's own selection and scrolling keep working.
 
 A frame of `starfield` on an 80 column terminal, as `--dump-frame` prints it:
 
@@ -123,6 +165,24 @@ environment does the same.
 taking a new colour on every hit. `drift` crawls along a slow path, which keeps
 a static image off one set of pixels.
 
+### Clock fonts and size
+
+| Font | |
+| --- | --- |
+| `block` | The default: 5 rows, 47 columns for `HH:MM:SS` |
+| `shadow` | `block` with a lighter block offset by one cell, for an edge |
+| `slim` | One-column strokes; 33 columns, for a narrow terminal |
+| `tall` | 7 rows, for a screen with height to spare |
+
+`clock_scale` goes from 1 to 4 and turns every glyph pixel into a square that
+many cells on a side, so a font grows without changing shape.
+
+Asking for more than the terminal has is not an error. The clock walks back
+down until something fits — that size, that size without the seconds, then one
+smaller, and so on, falling back to plain text on a terminal too small for any
+of it. The size asked for is remembered, so widening the terminal brings it
+back.
+
 ## Running it when the machine goes idle
 
 `binkam` is a screensaver, not a screen locker. Any key press or mouse
@@ -137,7 +197,7 @@ tmux can run it as its lock command, which is the least fuss of any of this:
 ```tmux
 # ~/.tmux.conf
 set -g lock-after-time 300
-set -g lock-command "binkam"
+set -g lock-command "binkam --lock"
 ```
 
 Five minutes without input in a session and the clock takes over the attached
@@ -154,13 +214,13 @@ never goes idle.
 listener {
     timeout = 300
     # Only start one, however many times the listener fires.
-    on-timeout = pidof binkam > /dev/null || foot --fullscreen -- binkam
+    on-timeout = pidof binkam > /dev/null || foot --fullscreen -- binkam --lock
 }
 ```
 
 Any terminal that can start fullscreen will do: `alacritty -o
-window.startup_mode=Fullscreen -e binkam`, `kitty --start-as=fullscreen
-binkam`, and so on.
+window.startup_mode=Fullscreen -e binkam --lock`, `kitty
+--start-as=fullscreen binkam --lock`, and so on.
 
 To have the screen really locked as well, keep `hyprlock` on a longer timeout
 and let `binkam` fill the time before it.
@@ -168,7 +228,7 @@ and let `binkam` fill the time before it.
 ### sway, or anything else with swayidle
 
 ```bash
-swayidle -w timeout 300 'pidof binkam > /dev/null || foot --fullscreen -- binkam'
+swayidle -w timeout 300 'pidof binkam > /dev/null || foot --fullscreen -- binkam --lock'
 ```
 
 ## Configuration
@@ -188,6 +248,11 @@ the quickest way to check a file is being picked up.
 
 Every key is optional. A broken file is reported with the line and column that
 went wrong, rather than being ignored or crashing.
+
+Pressing <kbd>Enter</kbd> on a list writes this file, so there is no need to
+edit it by hand. A saved file holds every setting, with one exception: `seed`
+is never written, because it pins the randomness for debugging and a saved one
+would hand every later run the same picture.
 
 ### Example `config.toml`
 
@@ -210,6 +275,11 @@ theme = "nord"
 
 # center, bounce, corner, drift
 clock_position = "drift"
+
+# block, shadow, slim or tall, and how many cells wide and tall one glyph
+# pixel becomes. Too big for the terminal simply draws smaller.
+clock_font = "block"
+clock_scale = 1
 
 # What the clock shows.
 show_seconds = true
@@ -273,6 +343,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 cargo run -- --dump-frame                      # one frame as plain text
 cargo run -- --dump-frame --anim matrix --size 80x24
+cargo run -- --dump-frame --clock-font tall --clock-scale 2
 cargo run --release -- --bench 4000            # what a frame costs
 ```
 

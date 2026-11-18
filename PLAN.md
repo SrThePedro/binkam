@@ -135,6 +135,26 @@ Amaç: Gerçekten "boşta kalınca" çalışsın.
 
 ---
 
+## Faz 8 — Uygulama içinden ayar yapma
+Amaç: `binkam`'ı açınca her şeyi oradan ayarlayabilmek, ayarların kalıcı olması.
+
+- [x] Saat fontu: birden fazla blok font (`block`, `shadow`, `slim`, `tall`)
+- [x] Saat boyutu: `clock_scale` 1-4, her glyph pikseli kare bir hücre bloğuna
+      büyüsün; sığmazsa kademe kademe küçülsün
+- [x] `Config::save`: ayarları TOML olarak geri yaz (seed hariç)
+- [x] Altta nvim tarzı tuş çubuğu; ekrana sığan en geniş sürüm çizilsin
+- [x] Her ayar için sol üstte açılan liste: oklarla gezinirken ekran anında
+      değişsin, Enter kaydetsin, Esc geri alsın
+- [x] `?` ile tüm tuşların listesi
+- [x] `--lock`: eski ekran koruyucu davranışı (her tuş çıkar), kilit/boşta
+      komutları bunu kullansın
+- [x] README, demo.tape ve tmux satırı güncellensin
+
+**Bitti:** `binkam` ile açıp tema/font/boyut değiştir, çık, tekrar aç — aynı
+şekilde açılıyor.
+
+---
+
 ## Fikir havuzu (sonra)
 - Analog saat (Canvas + Braille)
 - Pomodoro / geri sayım modu

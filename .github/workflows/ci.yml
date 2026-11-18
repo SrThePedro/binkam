@@ -46,8 +46,12 @@ jobs:
         run: |
           cargo run --release -- --list
           cargo run --release -- --list-themes
+          cargo run --release -- --list-fonts
           cargo run --release -- --print-config
           cargo run --release -- --dump-frame --size 80x24
           cargo run --release -- --dump-frame --size 1x1
+          cargo run --release -- --dump-frame --lock --size 80x24
+          cargo run --release -- --dump-frame --clock-font tall --clock-scale 4 --size 200x50
+          cargo run --release -- --dump-frame --clock-font slim --clock-scale 2 --size 40x12
           cargo run --release -- --dump-frame --anim matrix --theme nord --color 256 --size 200x50
           cargo run --release -- --bench 60 --size 80x24
