@@ -8,7 +8,7 @@ inside it: a key reminder sits along the bottom, each key opens a list, and the
 screen follows the highlighted line as you move through it. Choices are written
 back to the config file, so the next run starts where the last one left off.
 
-Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
+Built with [ratatui](https://ratatui.rs). Tested on Linux, macOS and Windows.
 
 ## Install
 
