@@ -129,7 +129,7 @@ Amaç: Gerçekten "boşta kalınca" çalışsın.
 - [x] (opsiyonel) CachyOS masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
       tam ekran terminalde başlatma örneği
 - [x] GitHub Actions: Linux + Windows'ta `fmt`, `clippy`, `test`, release build
-- [ ] Sürüm etiketi `v0.1.0`, release binary'leri
+- [x] Sürüm etiketi `v0.1.0`, release binary'leri
 
 **Bitti:** tmux'ta 5 dk boşta kalınca binkam açılıyor; CI yeşil.
 
