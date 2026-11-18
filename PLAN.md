@@ -126,7 +126,7 @@ Amaç: Gerçekten "boşta kalınca" çalışsın.
 
 - [x] `cargo install --path .` ile kurulum talimatı
 - [x] tmux entegrasyonu: `set -g lock-after-time 300` + `set -g lock-command "binkam"`
-- [x] (opsiyonel) CachyOS masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
+- [x] (opsiyonel) Linux masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
       tam ekran terminalde başlatma örneği
 - [x] GitHub Actions: Linux + Windows'ta `fmt`, `clippy`, `test`, release build
 - [x] Sürüm etiketi `v0.1.0`, release binary'leri
