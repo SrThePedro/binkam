@@ -11,11 +11,15 @@ Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
 From a clone, which puts `binkam` in `~/.cargo/bin`:
 
 ```bash
-cargo install --path .
+cargo install --path . --locked
 ```
 
 That directory has to be on `PATH`; `cargo` says so if it is not. To remove it
 again, `cargo uninstall binkam`.
+
+`--locked` builds against the versions in `Cargo.lock`, the ones the tests
+ran against. Without it `cargo install` takes the newest compatible
+dependencies instead, which is usually fine and occasionally not.
 
 Or run it straight from the repository without installing:
 
