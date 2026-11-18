@@ -1,4 +1,4 @@
-# kumsaati — Yol Haritası
+# binkam — Yol Haritası
 
 Her faz kendi başına çalışan bir sürümle biter. Bir faz bitmeden sonrakine geçilmez.
 "Bitti" kriterleri sağlanmadan faz kapatılmaz.
@@ -8,7 +8,7 @@ Her faz kendi başına çalışan bir sürümle biter. Bir faz bitmeden sonrakin
 ## Faz 0 — İskelet ve güvenli terminal
 Amaç: Boş ama sağlam bir döngü. Terminal asla bozuk kalmasın.
 
-- [x] `cargo init --name kumsaati`, edition 2024, `git init`
+- [x] `cargo init --name binkam`, edition 2024, `git init`
 - [x] Bağımlılıklar: `ratatui`, `color-eyre`, `clap` (derive)
 - [x] `main.rs`: `color_eyre::install()`, `ratatui::init()`, `App::run`, `ratatui::restore()`
 - [x] `app.rs`: sabit FPS döngüsü (varsayılan 30), `event::poll(timeout)` ile olay bekleme
@@ -93,7 +93,7 @@ kombinasyonlar gezilebiliyor.
 Amaç: Kullanıcı kodu değiştirmeden özelleştirebilsin.
 
 - [x] `config.rs`: `serde` + `toml`; yol `directories::ProjectDirs` ile
-      (Linux `~/.config/kumsaati/config.toml`, Windows `%APPDATA%\kumsaati\...`)
+      (Linux `~/.config/binkam/config.toml`, Windows `%APPDATA%\binkam\...`)
 - [x] Öncelik: CLI > config dosyası > varsayılan
 - [x] Seçenekler: `fps`, `anim` (veya liste), `cycle_minutes`, `theme`, `clock_position`,
       `show_seconds`, `show_date`, `hour_format` (24/12), `clock_backdrop`, `seed`
@@ -125,13 +125,13 @@ Amaç: Her terminalde düzgün, hafif.
 Amaç: Gerçekten "boşta kalınca" çalışsın.
 
 - [x] `cargo install --path .` ile kurulum talimatı
-- [x] tmux entegrasyonu: `set -g lock-after-time 300` + `set -g lock-command "kumsaati"`
+- [x] tmux entegrasyonu: `set -g lock-after-time 300` + `set -g lock-command "binkam"`
 - [x] (opsiyonel) CachyOS masaüstünde boşta kalma aracından (ör. hypridle / swayidle)
       tam ekran terminalde başlatma örneği
 - [x] GitHub Actions: Linux + Windows'ta `fmt`, `clippy`, `test`, release build
 - [ ] Sürüm etiketi `v0.1.0`, release binary'leri
 
-**Bitti:** tmux'ta 5 dk boşta kalınca kumsaati açılıyor; CI yeşil.
+**Bitti:** tmux'ta 5 dk boşta kalınca binkam açılıyor; CI yeşil.
 
 ---
 

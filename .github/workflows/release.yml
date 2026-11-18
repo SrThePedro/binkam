@@ -21,10 +21,10 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary: kumsaati
+            binary: binkam
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary: kumsaati.exe
+            binary: binkam.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -41,19 +41,19 @@ jobs:
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
-          tar -czf kumsaati-${{ matrix.target }}.tar.gz \
+          tar -czf binkam-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release ${{ matrix.binary }}
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           Compress-Archive -Path target/${{ matrix.target }}/release/${{ matrix.binary }} `
-            -DestinationPath kumsaati-${{ matrix.target }}.zip
+            -DestinationPath binkam-${{ matrix.target }}.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kumsaati-${{ matrix.target }}
-          path: kumsaati-${{ matrix.target }}.*
+          name: binkam-${{ matrix.target }}
+          path: binkam-${{ matrix.target }}.*
           if-no-files-found: error
 
   release:

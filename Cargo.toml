@@ -1,5 +1,5 @@
 [package]
-name = "kumsaati"
+name = "binkam"
 version = "0.1.0"
 edition = "2024"
 # let-chains, which this uses, are stable from here on.

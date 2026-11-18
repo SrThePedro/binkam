@@ -18,7 +18,7 @@ Set PlaybackSpeed 1
 Set TypingSpeed 40ms
 
 Hide
-Type "kumsaati --preview --anim starfield --theme nord"
+Type "binkam --preview --anim starfield --theme nord"
 Enter
 Sleep 1s
 Show

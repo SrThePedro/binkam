@@ -1,4 +1,4 @@
-//! kumsaati — an animated, clock-centered terminal screensaver.
+//! binkam — an animated, clock-centered terminal screensaver.
 
 mod anim;
 mod app;

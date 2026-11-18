@@ -26,7 +26,7 @@ use crate::{
 const FILE_NAME: &str = "config.toml";
 
 /// Application name, which decides the config directory.
-const APP_NAME: &str = "kumsaati";
+const APP_NAME: &str = "binkam";
 
 /// Highest frame rate that still makes sense to ask for.
 ///
@@ -86,7 +86,7 @@ impl Default for Config {
 impl Config {
     /// Where the config file lives on this platform.
     ///
-    /// `~/.config/kumsaati/config.toml` on Linux, inside `%APPDATA%` on
+    /// `~/.config/binkam/config.toml` on Linux, inside `%APPDATA%` on
     /// Windows. `None` if the platform has no such notion of a home.
     pub fn default_path() -> Option<PathBuf> {
         ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.config_dir().join(FILE_NAME))
@@ -289,7 +289,7 @@ mod tests {
     use clap::Parser;
 
     fn cli(args: &[&str]) -> Cli {
-        let mut full = vec!["kumsaati"];
+        let mut full = vec!["binkam"];
         full.extend_from_slice(args);
         Cli::parse_from(full)
     }
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn a_missing_file_is_an_error_with_its_path() {
-        let path = Path::new("/definitely/not/here/kumsaati.toml");
+        let path = Path::new("/definitely/not/here/binkam.toml");
         let error = format!("{:#}", Config::from_file(path).unwrap_err());
         assert!(error.contains("/definitely/not/here"), "{error}");
     }

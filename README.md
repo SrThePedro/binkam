@@ -1,4 +1,4 @@
-# kumsaati
+# binkam
 
 An animated, clock-centered terminal screensaver. A big block-font clock sits on
 top of a changeable background effect; any key press puts the terminal back the
@@ -8,14 +8,14 @@ Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
 
 ## Install
 
-From a clone, which puts `kumsaati` in `~/.cargo/bin`:
+From a clone, which puts `binkam` in `~/.cargo/bin`:
 
 ```bash
 cargo install --path .
 ```
 
 That directory has to be on `PATH`; `cargo` says so if it is not. To remove it
-again, `cargo uninstall kumsaati`.
+again, `cargo uninstall binkam`.
 
 Or run it straight from the repository without installing:
 
@@ -31,14 +31,14 @@ Needs a Rust toolchain of 1.88 or newer, because of let-chains.
 ## Usage
 
 ```bash
-kumsaati                                  # random animation, changing every few minutes
-kumsaati --anim fire                      # pin one animation
-kumsaati --anim fire --anim snow          # cycle between just these two
-kumsaati --theme nord --clock-position drift
-kumsaati --preview                        # browse the combinations
-kumsaati --list                           # list the animations
-kumsaati --list-themes                    # list the themes
-kumsaati --print-config                   # print the settings this run would use
+binkam                                  # random animation, changing every few minutes
+binkam --anim fire                      # pin one animation
+binkam --anim fire --anim snow          # cycle between just these two
+binkam --theme nord --clock-position drift
+binkam --preview                        # browse the combinations
+binkam --list                           # list the animations
+binkam --list-themes                    # list the themes
+binkam --print-config                   # print the settings this run would use
 ```
 
 Any key press or mouse movement quits, except in `--preview`, where `n` and `p`
@@ -119,7 +119,7 @@ a static image off one set of pixels.
 
 ## Running it when the machine goes idle
 
-`kumsaati` is a screensaver, not a screen locker. Any key press or mouse
+`binkam` is a screensaver, not a screen locker. Any key press or mouse
 movement ends it, and it never asks for a password. If you want the screen
 actually locked, run a locker and let this decorate the wait, or use it only
 inside a terminal multiplexer.
@@ -131,7 +131,7 @@ tmux can run it as its lock command, which is the least fuss of any of this:
 ```tmux
 # ~/.tmux.conf
 set -g lock-after-time 300
-set -g lock-command "kumsaati"
+set -g lock-command "binkam"
 ```
 
 Five minutes without input in a session and the clock takes over the attached
@@ -148,21 +148,21 @@ never goes idle.
 listener {
     timeout = 300
     # Only start one, however many times the listener fires.
-    on-timeout = pidof kumsaati > /dev/null || foot --fullscreen -- kumsaati
+    on-timeout = pidof binkam > /dev/null || foot --fullscreen -- binkam
 }
 ```
 
 Any terminal that can start fullscreen will do: `alacritty -o
-window.startup_mode=Fullscreen -e kumsaati`, `kitty --start-as=fullscreen
-kumsaati`, and so on.
+window.startup_mode=Fullscreen -e binkam`, `kitty --start-as=fullscreen
+binkam`, and so on.
 
 To have the screen really locked as well, keep `hyprlock` on a longer timeout
-and let `kumsaati` fill the time before it.
+and let `binkam` fill the time before it.
 
 ### sway, or anything else with swayidle
 
 ```bash
-swayidle -w timeout 300 'pidof kumsaati > /dev/null || foot --fullscreen -- kumsaati'
+swayidle -w timeout 300 'pidof binkam > /dev/null || foot --fullscreen -- binkam'
 ```
 
 ## Configuration
@@ -173,11 +173,11 @@ without one the defaults apply.
 
 | Platform | Path |
 | --- | --- |
-| Linux | `~/.config/kumsaati/config.toml` |
-| Windows | `%APPDATA%\kumsaati\config\config.toml` |
+| Linux | `~/.config/binkam/config.toml` |
+| Windows | `%APPDATA%\binkam\config\config.toml` |
 
-`kumsaati --config path/to/file.toml` reads somewhere else instead, and
-`kumsaati --print-config` prints the settings a run would end up with, which is
+`binkam --config path/to/file.toml` reads somewhere else instead, and
+`binkam --print-config` prints the settings a run would end up with, which is
 the quickest way to check a file is being picked up.
 
 Every key is optional. A broken file is reported with the line and column that
@@ -254,8 +254,8 @@ To produce the table on another machine:
 
 ```bash
 cargo build --release
-for a in $(./target/release/kumsaati --list); do
-  ./target/release/kumsaati --bench 4000 --size 200x50 --anim "$a" --seed 1
+for a in $(./target/release/binkam --list); do
+  ./target/release/binkam --bench 4000 --size 200x50 --anim "$a" --seed 1
 done
 ```
 

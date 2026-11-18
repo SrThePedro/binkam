@@ -10,7 +10,7 @@ use crate::{clock::HourFormat, color::ColorSetting, config::MAX_FPS};
 
 /// An animated, clock-centered terminal screensaver.
 #[derive(Debug, Parser)]
-#[command(name = "kumsaati", version, about)]
+#[command(name = "binkam", version, about)]
 pub struct Cli {
     /// Target frames per second for the render loop.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=i64::from(MAX_FPS)))]
@@ -188,7 +188,7 @@ mod tests {
     use super::*;
 
     fn cli(args: &[&str]) -> Cli {
-        let mut full = vec!["kumsaati"];
+        let mut full = vec!["binkam"];
         full.extend_from_slice(args);
         Cli::parse_from(full)
     }
@@ -249,7 +249,7 @@ mod tests {
             vec!["--fps", "0"],
             vec!["--fps", "9999"],
         ] {
-            let mut full = vec!["kumsaati"];
+            let mut full = vec!["binkam"];
             full.extend_from_slice(&bad);
             assert!(Cli::try_parse_from(full).is_err(), "{bad:?} should fail");
         }
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(cli(&["--backdrop"]).backdrop(), Some(true));
         assert_eq!(cli(&["--backdrop", "false"]).backdrop(), Some(false));
         assert_eq!(cli(&["--no-backdrop"]).backdrop(), Some(false));
-        assert!(Cli::try_parse_from(["kumsaati", "--backdrop", "--no-backdrop"]).is_err());
+        assert!(Cli::try_parse_from(["binkam", "--backdrop", "--no-backdrop"]).is_err());
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
             cli(&["--color", "truecolor"]).color(),
             Some(ColorSetting::Truecolor)
         );
-        assert!(Cli::try_parse_from(["kumsaati", "--color", "256", "--no-color"]).is_err());
+        assert!(Cli::try_parse_from(["binkam", "--color", "256", "--no-color"]).is_err());
     }
 
     #[test]

@@ -152,6 +152,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "binkam"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "color-eyre",
+ "directories",
+ "rand 0.10.4",
+ "ratatui",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -828,20 +842,6 @@ dependencies = [
  "hashbrown",
  "portable-atomic",
  "thiserror 2.0.21",
-]
-
-[[package]]
-name = "kumsaati"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "color-eyre",
- "directories",
- "rand 0.10.4",
- "ratatui",
- "serde",
- "toml",
 ]
 
 [[package]]

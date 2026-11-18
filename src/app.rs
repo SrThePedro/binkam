@@ -582,7 +582,7 @@ mod tests {
     /// `Config::resolve`, so tests never depend on the config file that
     /// happens to be on the machine running them.
     fn app_from(args: &[&str]) -> App {
-        let mut full = vec!["kumsaati"];
+        let mut full = vec!["binkam"];
         full.extend_from_slice(args);
         let cli = Cli::parse_from(full);
         let config = Config::merge(Config::default(), &cli).expect("valid settings");
@@ -696,7 +696,7 @@ mod tests {
 
     #[test]
     fn unknown_animation_is_an_error() {
-        let cli = Cli::parse_from(["kumsaati"]);
+        let cli = Cli::parse_from(["binkam"]);
         let config = Config {
             anim: vec!["nope".to_owned()],
             ..Config::default()
@@ -1132,7 +1132,7 @@ mod tests {
 
     #[test]
     fn dump_renders_requested_size() {
-        let cli = Cli::parse_from(["kumsaati", "--dump-frame", "--size", "20x5"]);
+        let cli = Cli::parse_from(["binkam", "--dump-frame", "--size", "20x5"]);
         let config = Config::merge(Config::default(), &cli).unwrap();
         let (width, height) = cli.dump_size();
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
