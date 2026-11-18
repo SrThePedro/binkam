@@ -12,29 +12,42 @@ Built with [ratatui](https://ratatui.rs). Works on Linux and Windows.
 
 ## Install
 
-From a clone, which puts `binkam` in `~/.cargo/bin`:
+### A prebuilt binary
+
+Every [release](../../releases) carries binaries for Linux, macOS and Windows,
+with a `SHA256SUMS` file to check them against. No toolchain needed:
 
 ```bash
-cargo install --path . --locked
+# Linux, x86_64. The release page lists the other targets.
+curl -fsSL https://github.com/SrThePedro/binkam/releases/latest/download/binkam-x86_64-unknown-linux-musl.tar.gz | tar -xz
+install -Dm755 binkam ~/.local/bin/binkam
 ```
 
-That directory has to be on `PATH`; `cargo` says so if it is not. To remove it
-again, `cargo uninstall binkam`.
+The `musl` build is statically linked, so it runs on any distribution whatever
+its glibc. The `gnu` one is the ordinary dynamically linked build. On Windows,
+unzip it and put `binkam.exe` anywhere on `PATH`.
 
-`--locked` builds against the versions in `Cargo.lock`, the ones the tests
-ran against. Without it `cargo install` takes the newest compatible
-dependencies instead, which is usually fine and occasionally not.
-
-Or run it straight from the repository without installing:
+### With cargo, straight from the repository
 
 ```bash
-cargo run --release
+cargo install --git https://github.com/SrThePedro/binkam --locked
 ```
 
-Prebuilt binaries for Linux and Windows are attached to each
-[release](../../releases).
+That puts `binkam` in `~/.cargo/bin`, which has to be on `PATH`; `cargo` says
+so if it is not. `cargo uninstall binkam` removes it again.
 
-Needs a Rust toolchain of 1.88 or newer, because of let-chains.
+`--locked` builds against the versions in `Cargo.lock`, the ones the tests ran
+against. Without it `cargo install` takes the newest compatible dependencies
+instead, which is usually fine and occasionally not.
+
+### From a clone
+
+```bash
+cargo install --path . --locked   # install it
+cargo run --release               # or just run it
+```
+
+Building needs a Rust toolchain of 1.88 or newer, because of let-chains.
 
 ## Usage
 
