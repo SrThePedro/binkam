@@ -155,6 +155,25 @@ Amaç: `binkam`'ı açınca her şeyi oradan ayarlayabilmek, ayarların kalıcı
 
 ---
 
+## Faz 9 — Kolay kurulum ve dağıtım
+Amaç: Rust kurmayan birinin de tek komutla kurabilmesi.
+
+- [x] Lisans seç (MIT OR Apache-2.0) — her paket deposunun ön koşulu
+- [x] `Cargo.toml`: `license`, `repository`, `keywords`, `categories`,
+      `cargo binstall` metadatası
+- [x] Release: musl (statik), arm64 Linux, arm64 + x86_64 macOS; `SHA256SUMS`;
+      arşivlerin içinde lisanslar
+- [x] macOS'u CI matrisine ekle (test edilmemiş platforma binary atmamak için)
+- [x] README: hazır binary ve `cargo install --git` öne alınsın
+- [x] AUR için `PKGBUILD` (`binkam` ve `binkam-bin`)
+- [ ] crates.io'ya yayınla (`cargo publish` — kullanıcının token'ı)
+- [ ] AUR'a yükle (kullanıcının AUR hesabı ve SSH anahtarı)
+- [ ] GIF (`vhs demo.tape`) — ekran koruyucuda en çok ikna eden şey
+
+**Bitti:** `cargo install --git …`, hazır binary ve `cargo binstall` çalışıyor.
+
+---
+
 ## Fikir havuzu (sonra)
 - Analog saat (Canvas + Braille)
 - Pomodoro / geri sayım modu
