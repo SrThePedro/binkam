@@ -11,7 +11,7 @@ repository = "https://github.com/SrThePedro/binkam"
 keywords = ["screensaver", "tui", "terminal", "clock", "ratatui"]
 categories = ["command-line-utilities"]
 # Nothing here is needed to build the crate.
-exclude = [".github/", "packaging/", "demo.tape"]
+exclude = [".github/", "packaging/", "contrib/", "demo.tape"]
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }

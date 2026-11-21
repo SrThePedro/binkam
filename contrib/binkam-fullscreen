@@ -1,0 +1,107 @@
+#!/bin/sh
+# Open binkam as a full-screen screensaver window.
+#
+# Bind this to a key in your desktop environment or window manager: it finds a
+# terminal emulator, asks it for a full-screen window, and runs `binkam --lock`
+# inside it, so the first key press or mouse movement closes the lot. Running it
+# while a window is already open does nothing, so leaning on the key cannot pile
+# up a dozen of them.
+#
+# Anything you pass is passed on to binkam: `binkam-fullscreen --anim matrix`.
+#
+# Environment:
+#   BINKAM           the binary to run (default: the first binkam found)
+#   BINKAM_TERMINAL  the terminal to run it in (default: the first one found)
+#   BINKAM_APP_ID    the window's app-id and title (default: binkam), which is
+#                    what a window rule can match on
+
+set -eu
+
+app_id=${BINKAM_APP_ID:-binkam}
+
+die() {
+	printf 'binkam-fullscreen: %s\n' "$1" >&2
+	if command -v notify-send > /dev/null 2>&1; then
+		notify-send -u critical 'binkam' "$1"
+	fi
+	exit 1
+}
+
+# The first of its arguments that exists and can be run. Absolute paths are
+# fine: `command -v` echoes those back as they are.
+first_of() {
+	for candidate in "$@"; do
+		if command -v "$candidate" > /dev/null 2>&1; then
+			command -v "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# One window at a time. The file holds this script's pid, and the `exec` at the
+# end hands that same pid to the terminal, so it stays valid as long as the
+# window does. A pid file left behind by an earlier run names nothing running.
+pid_file="${XDG_RUNTIME_DIR:-/tmp}/binkam-fullscreen.pid"
+if [ -r "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2> /dev/null; then
+	exit 0
+fi
+printf '%s\n' "$$" > "$pid_file"
+
+binkam=${BINKAM:-}
+if [ -z "$binkam" ]; then
+	# A key bound in a desktop environment usually has a thinner PATH than a
+	# login shell, so look where cargo and the packages put it as well.
+	binkam=$(first_of binkam "$HOME/.cargo/bin/binkam" "$HOME/.local/bin/binkam") \
+		|| die 'binkam is not installed, or not on PATH'
+fi
+
+terminal=${BINKAM_TERMINAL:-}
+if [ -z "$terminal" ]; then
+	terminal=$(first_of foot kitty ghostty alacritty wezterm konsole \
+		gnome-terminal xfce4-terminal xterm) \
+		|| die 'no terminal emulator found; set BINKAM_TERMINAL'
+fi
+
+# Every branch asks for a full-screen window and names it, so a window rule can
+# find it. The terminals with no flag for full screen need such a rule.
+case ${terminal##*/} in
+	foot)
+		exec "$terminal" --fullscreen --app-id="$app_id" --title="$app_id" \
+			"$binkam" --lock "$@"
+		;;
+	kitty)
+		exec "$terminal" --start-as=fullscreen --class="$app_id" \
+			--title="$app_id" "$binkam" --lock "$@"
+		;;
+	ghostty)
+		# ghostty wants a dotted GTK application id and ignores anything else.
+		exec "$terminal" --fullscreen=true --class="org.binkam.$app_id" \
+			--title="$app_id" -e "$binkam" --lock "$@"
+		;;
+	alacritty)
+		exec "$terminal" -o "window.startup_mode=\"Fullscreen\"" \
+			--class "$app_id" --title "$app_id" -e "$binkam" --lock "$@"
+		;;
+	wezterm)
+		exec "$terminal" start --class "$app_id" -- "$binkam" --lock "$@"
+		;;
+	konsole)
+		exec "$terminal" --fullscreen -e "$binkam" --lock "$@"
+		;;
+	gnome-terminal)
+		exec "$terminal" --full-screen --title "$app_id" -- "$binkam" --lock "$@"
+		;;
+	xfce4-terminal)
+		exec "$terminal" --fullscreen --title "$app_id" \
+			--command "$binkam --lock $*"
+		;;
+	xterm)
+		exec "$terminal" -fullscreen -title "$app_id" -class "$app_id" \
+			-e "$binkam" --lock "$@"
+		;;
+	*)
+		# An unknown terminal: -e is the most common spelling of "run this".
+		exec "$terminal" -e "$binkam" --lock "$@"
+		;;
+esac
