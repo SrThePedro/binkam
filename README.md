@@ -196,6 +196,39 @@ smaller, and so on, falling back to plain text on a terminal too small for any
 of it. The size asked for is remembered, so widening the terminal brings it
 back.
 
+## A key that starts it
+
+A screensaver worth having is one you can also summon.
+`contrib/binkam-fullscreen` opens a full-screen terminal running `binkam
+--lock`, so the first key press or mouse movement gives the screen back. It
+finds a terminal itself, hands anything you give it on to binkam, and does
+nothing at all while a window is already open.
+
+```bash
+install -Dm755 contrib/binkam-fullscreen ~/.local/bin/binkam-fullscreen
+```
+
+Then bind it. Hyprland, with the Lua configuration:
+
+```lua
+hl.bind(
+    "SUPER + B",
+    hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/binkam-fullscreen")
+)
+```
+
+or with `hyprland.conf`:
+
+```ini
+bind = SUPER, B, exec, ~/.local/bin/binkam-fullscreen
+```
+
+A key bound in a desktop environment rarely has the same `PATH` as a shell,
+which is why the path is spelled out; the script looks in `~/.cargo/bin` for
+binkam for that same reason. [`contrib/README.md`](contrib/README.md) has the
+same for sway, KDE, GNOME, Xfce and Windows, the terminals the script knows,
+and the environment variables that override its choices.
+
 ## Running it when the machine goes idle
 
 `binkam` is a screensaver, not a screen locker. Any key press or mouse
@@ -232,8 +265,11 @@ listener {
 ```
 
 Any terminal that can start fullscreen will do: `alacritty -o
-window.startup_mode=Fullscreen -e binkam --lock`, `kitty
---start-as=fullscreen binkam --lock`, and so on.
+'window.startup_mode="Fullscreen"' -e binkam --lock`, `kitty
+--start-as=fullscreen binkam --lock`, and so on. (Alacritty reads `-o` as
+TOML, and quietly ignores the option if the value is not quoted.)
+`contrib/binkam-fullscreen` knows the spelling for a dozen terminals and
+picks one for you.
 
 To have the screen really locked as well, keep `hyprlock` on a longer timeout
 and let `binkam` fill the time before it.
